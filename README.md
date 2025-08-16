@@ -72,8 +72,6 @@ mlg.set_parameters(N_layers=N, stacking='abc', **params)
 E, k_mag = mlg.calculate_bands()
 
 # Same deal for ABA:
-# Old: bands_AB(N, params)  
-# New: 
 mlg.set_parameters(N_layers=N, stacking='aba', **params)
 E, k_mag = mlg.calculate_bands()
 ```

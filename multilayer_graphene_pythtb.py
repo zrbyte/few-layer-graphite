@@ -347,7 +347,7 @@ def build_hamiltonian(kx_rec, ky_rec, N=None, stacking_type=None):
 
 def plot_bands(E=None, k_mag=None, N=None, stacking_type=None, 
                xlim=(2.8, 3.1), ylim=(-0.5, 0.5), figsize=(5, 4),
-               highlight_middle=True):
+               highlight_middle=True, save_as=None):
     """
     Plot band structure for single layer number.
     
@@ -359,6 +359,7 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         xlim, ylim: Plot limits
         figsize: Figure size
         highlight_middle: Whether to highlight middle bands with thicker lines
+        save_as: Filename to save plot (e.g., 'bands.svg', 'bands.png'). If None, just show.
     """
     if E is None or k_mag is None:
         E, k_mag = calculate_bands(N, stacking_type)
@@ -380,10 +381,15 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
     plt.xlim(xlim)
     plt.ylim(ylim)
     plt.tight_layout()
-    plt.show()
+    
+    if save_as:
+        plt.savefig(save_as, bbox_inches='tight', dpi=300)  # High quality save with tight bbox
+        print(f"Plot saved as: {save_as}")  # Confirm save
+    else:
+        plt.show()
 
 def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
-                         xlim=(2.8, 3.1), ylim=(-0.7, 0.7), figsize=(16, 2)):
+                         xlim=(2.8, 3.1), ylim=(-0.7, 0.7), figsize=(16, 2), save_as=None):
     """
     Plot comparison panels for different layer numbers.
     
@@ -392,6 +398,7 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
         stacking_type: 'abc' or 'aba' (uses global stacking if None)
         xlim, ylim: Plot limits
         figsize: Figure size
+        save_as: Filename to save plot (e.g., 'comparison.svg', 'comparison.png'). If None, just show.
     """
     if stacking_type is None:
         stacking_type = stacking
@@ -431,7 +438,12 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
         ax.set_xlabel("K")
     
     plt.tight_layout()
-    plt.show()
+    
+    if save_as:
+        plt.savefig(save_as, bbox_inches='tight', dpi=300)  # High quality save with tight bbox
+        print(f"Plot saved as: {save_as}")  # Confirm save
+    else:
+        plt.show()
 
 # =============================================================================
 # Utility Functions

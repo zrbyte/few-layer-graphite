@@ -25,6 +25,10 @@ def main():
     mlg.set_parameters(N_layers=3, stacking='abc')
     mlg.plot_bands()
     
+    # Example 1b: Save the same plot as SVG
+    print("\\n1b. Save 3-layer ABC as SVG:")
+    mlg.plot_bands(save_as='3layer_abc_bands.svg')
+    
     # Example 2: Compare ABC vs ABA for same layer number
     print("\n2. Comparing ABC vs ABA for 4 layers:")
     
@@ -68,6 +72,10 @@ def main():
     print("\n3. Panel comparison for ABC stacking (1-8 layers):")
     mlg.set_parameters(stacking='abc')
     mlg.plot_panel_comparison()
+    
+    # Example 3b: Save panel comparison as SVG
+    print("\\n3b. Save panel comparison as SVG:")
+    mlg.plot_panel_comparison(save_as='abc_panel_comparison.svg')
     
     # Example 4: Modify parameters and see the effect
     print("\n4. Effect of modified γ1 parameter:")
