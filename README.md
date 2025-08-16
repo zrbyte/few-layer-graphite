@@ -38,9 +38,11 @@ Don't worry, the defaults are sensible! But if you're feeling adventurous:
 
 ### The k-Space Details
 - `K_point`: Where's the K point? (default: [1/3, 1/3])
-- `dk`: How far around K to look (default: 1.5)
-- `n_k`: How many k-points (default: 1500 - plenty!)
+- `dk`: Legacy range around K (kept for API compatibility)
+- `n_k`: How many k-points along the default path (default: 1500)
 - `d_cc`: Carbon-carbon bond length in Å (default: 1.42)
+
+By default, band plots now use the high-symmetry path Γ → K → M, and the x-axis is the arc length along this path with the K point centered at 0 (Γ at negative x, M at positive x). You can override x-limits via the `xlim` argument.
 
 ## What Can You Do With It?
 
@@ -55,6 +57,9 @@ Don't worry, the defaults are sensible! But if you're feeling adventurous:
 ### Plotting
 - `plot_bands(...)`: Single band structure plot
 - `plot_panel_comparison(...)`: Side-by-side comparison panels
+
+### Brillouin Zone helpers
+- `get_brillouin_zone(plot=True, ax=None, annotate=True, figsize=(4,4), save_as=None, show=True)`: Returns a dictionary with reciprocal vectors (`b1`, `b2`), Γ, K and M points (both fractional and Cartesian), and the first Brillouin zone hexagon vertices (Å⁻¹). If `plot=True`, it also draws the BZ hexagon and marks Γ, K, and M; you can pass an existing Matplotlib `ax` to draw into, or let it create one.
 
 
 ### The Math (For Those Who Care)

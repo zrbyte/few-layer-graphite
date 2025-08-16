@@ -39,32 +39,144 @@ stacking = 'abc'       # 'abc' for rhombohedral or 'aba' for Bernal
 
 # k-path configuration around K point
 K_point = np.array([1/3, 1/3], float)  # K point in reciprocal lattice units
-dk = 1.5              # k-space range around K
-n_k = 1500            # Number of k-points
+dk = 1.5              # Legacy: k-space range around K (kept for API compatibility)
+n_k = 1500            # Number of k-points along default path
 d_cc = 1.42           # Carbon-carbon distance (Å)
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
+def _reciprocal_vectors():
+    """
+    Compute reciprocal lattice vectors (Å⁻¹) for graphene using d_cc.
+
+    Returns:
+        tuple: (b1, b2) 2D vectors in Cartesian coordinates (Å⁻¹)
+    """
+    # Graphene real-space lattice constant a = √3 * d_cc
+    a = np.sqrt(3.0) * d_cc
+    # Primitive real-space lattice vectors (Å) in standard orientation
+    a1 = np.array([a, 0.0])
+    a2 = np.array([a/2.0, a*np.sqrt(3.0)/2.0])
+    
+    # Reciprocal lattice vectors: b_i · a_j = 2π δ_ij
+    # For 2D: b1 = 2π (a2_perp) / (a1 × a2), b2 = 2π (a1_perp) / (a1 × a2)
+    # where a2_perp = (-a2_y, a2_x) and a1_perp = (-a1_y, a1_x)
+    cross_product = a1[0] * a2[1] - a1[1] * a2[0]  # a1 × a2 (z-component)
+    
+    b1 = 2.0 * np.pi * np.array([-a2[1], a2[0]]) / cross_product
+    b2 = 2.0 * np.pi * np.array([a1[1], -a1[0]]) / cross_product
+    
+    return b1, b2
+
+def get_brillouin_zone(plot=True, ax=None, annotate=True, figsize=(4, 4), save_as=None, show=True):
+    """
+    Gather first Brillouin zone coordinates and key high-symmetry points, and
+    optionally plot the BZ hexagon with Γ, K and M highlighted.
+
+    Args:
+        plot: Whether to draw a plot of the BZ
+        ax: Optional Matplotlib Axes to draw into (created if None)
+        annotate: Whether to add text labels near Γ, K, M
+        figsize: Figure size used when creating a new Axes
+        save_as: Optional filename to save the figure
+        show: Whether to call plt.show() when creating a new figure
+
+    Returns:
+        dict: with keys 'b1','b2','Gamma','K_frac','M_frac','K_cart','M_cart','BZ_vertices','fig','ax'
+    """
+    b1, b2 = _reciprocal_vectors()
+    # For graphene, K points are at (±1/3, ±2/3) and (±2/3, ±1/3) combinations that give |K|=4π/(3a)
+    K_frac = np.array([
+        [ 1/3,  2/3],
+        [ 2/3,  1/3], 
+        [ 1/3, -1/3],
+        [-1/3, -2/3],
+        [-2/3, -1/3],
+        [-1/3,  1/3],
+    ], float)
+    # M points are at edge midpoints of first BZ (midpoints between adjacent K points)
+    M_frac = np.array([
+        [-1/2, -1/2],
+        [-1/2,  0.0],
+        [ 0.0,  1/2],
+        [ 1/2,  1/2],
+        [ 1/2,  0.0],
+        [ 0.0, -1/2],
+    ], float)
+    def frac_to_cart(frac):
+        return frac[..., 0:1]*b1 + frac[..., 1:2]*b2
+    K_cart = frac_to_cart(K_frac).reshape(-1, 2)
+    M_cart = frac_to_cart(M_frac).reshape(-1, 2)
+    fig = None
+    if plot:
+        if ax is None:
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(111)
+        closed_hex = np.vstack([K_cart, K_cart[0]])
+        ax.plot(closed_hex[:, 0], closed_hex[:, 1], color='black', linewidth=1.0)
+        ax.scatter(K_cart[:, 0], K_cart[:, 1], s=18, c='tab:red', label='K')
+        ax.scatter(M_cart[:, 0], M_cart[:, 1], s=18, c='tab:blue', label='M')
+        ax.scatter([0.0], [0.0], s=24, c='tab:green', label='Γ', zorder=3)
+        if annotate:
+            ax.annotate('Γ', (0.0, 0.0), textcoords='offset points', xytext=(6, 4))
+            ax.annotate('K', K_cart[0], textcoords='offset points', xytext=(6, 4))
+            ax.annotate('M', M_cart[0], textcoords='offset points', xytext=(6, 4))
+        ax.set_aspect(1.0)
+        ax.set_xlabel('k_x (Å⁻¹)')
+        ax.set_ylabel('k_y (Å⁻¹)')
+        ax.grid(True, linestyle=':', linewidth=0.5, alpha=0.7)
+        ax.legend(frameon=False, fontsize=8, loc='upper right')
+        if save_as is not None:
+            fig_to_save = ax.figure if fig is None else fig
+            fig_to_save.savefig(save_as, bbox_inches='tight', dpi=300)
+        if fig is not None and show:
+            plt.show()
+
+    return {
+        'b1': b1, 'b2': b2,
+        'Gamma': np.array([0.0, 0.0]),
+        'K_frac': K_frac, 'M_frac': M_frac,
+        'K_cart': K_cart, 'M_cart': M_cart,
+        'BZ_vertices': K_cart,
+        'fig': fig if plot else None,
+        'ax': ax if plot else None,
+    }
+
 def get_k_path():
     """
-    Generate k-path around K point in reciprocal lattice units.
-    
+    Default k-path Γ → K → M with K shifted to x = 0.
+
     Returns:
-        tuple: (k_path_recip, k_mag) where k_path_recip is the k-path in 
-               reciprocal lattice units and k_mag is |k| for plotting (Å⁻¹)
+        tuple: (k_path_recip, k_mag) with fractional k-points and arc-length axis (Å⁻¹)
     """
-    k_path_recip = np.column_stack([
-        np.linspace(K_point[0]-dk, K_point[0]+dk, n_k),
-        np.full(n_k, K_point[1])
+    b1, b2 = _reciprocal_vectors()
+    Gamma_f = np.array([0.0, 0.0])
+    K_f = np.array([1/3, 2/3])  # Use first K point from proper hexagon
+    M_f = np.array([1/2, 0.0])
+    def f2c(frac):
+        return frac[0]*b1 + frac[1]*b2
+    Gamma_c, K_c, M_c = f2c(Gamma_f), f2c(K_f), f2c(M_f)
+    L1 = np.linalg.norm(K_c - Gamma_c)
+    L2 = np.linalg.norm(M_c - K_c)
+    n1 = max(2, int(round(n_k * L1 / (L1 + L2))))
+    n2 = max(2, n_k - n1)
+    seg1 = np.column_stack([
+        np.linspace(Gamma_f[0], K_f[0], n1, endpoint=False),
+        np.linspace(Gamma_f[1], K_f[1], n1, endpoint=False),
     ])
-    
-    # |k| for plotting (Å⁻¹)
-    k_mag = (2*np.pi/d_cc) * np.sqrt(
-        (4/3)*k_path_recip[:,0]**2 - (4/9)*k_path_recip[:,0] + 4/27
-    )
-    
+    seg2 = np.column_stack([
+        np.linspace(K_f[0], M_f[0], n2),
+        np.linspace(K_f[1], M_f[1], n2),
+    ])
+    k_path_recip = np.vstack([seg1, seg2])
+    k_cart = k_path_recip @ np.vstack([b1, b2])
+    deltas = np.vstack([[0.0, 0.0], np.diff(k_cart, axis=0)])
+    s = np.cumsum(np.linalg.norm(deltas, axis=1))
+    idx_K = seg1.shape[0]
+    s_K = s[idx_K]
+    k_mag = s - s_K
     return k_path_recip, k_mag
 
 def get_parameters():
@@ -346,7 +458,7 @@ def build_hamiltonian(kx_rec, ky_rec, N=None, stacking_type=None):
 # =============================================================================
 
 def plot_bands(E=None, k_mag=None, N=None, stacking_type=None, 
-               xlim=(2.8, 3.1), ylim=(-0.5, 0.5), figsize=(5, 4),
+               xlim=None, ylim=(-0.5, 0.5), figsize=(5, 4),
                highlight_middle=True, save_as=None):
     """
     Plot band structure for single layer number.
@@ -377,9 +489,38 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         plt.plot(k_mag, E[:,b], linewidth=lw, color='black')  # Plot all bands in black
     
     plt.ylabel("Energy (eV)")
+    plt.xlabel("k along Γ → K → M")
     plt.title(f"{stacking_type.upper()} | Grüneis TB–GW | {N}-layer (PythTB)")
-    plt.xlim(xlim)
+    if xlim is None:
+        # Default: focus around K point (at x=0) along Γ→K→M direction
+        k_range = k_mag.max() - k_mag.min()
+        plt.xlim(-0.15 * k_range, 0.15 * k_range)  # ±15% of total range around K
+    else:
+        plt.xlim(xlim)
     plt.ylim(ylim)
+    
+    # Add high-symmetry point labels on x-axis (K is at x=0)
+    current_xlim = plt.gca().get_xlim()
+    gamma_pos = k_mag.min()  # Γ at leftmost position
+    k_pos = 0.0              # K at center (x=0)
+    m_pos = k_mag.max()      # M at rightmost position
+    
+    # Only show labels for points within current view
+    tick_positions = []
+    tick_labels = []
+    if current_xlim[0] <= gamma_pos <= current_xlim[1]:
+        tick_positions.append(gamma_pos)
+        tick_labels.append('Γ')
+    if current_xlim[0] <= k_pos <= current_xlim[1]:
+        tick_positions.append(k_pos)
+        tick_labels.append('K')
+    if current_xlim[0] <= m_pos <= current_xlim[1]:
+        tick_positions.append(m_pos)
+        tick_labels.append('M')
+    
+    if tick_positions:
+        plt.xticks(tick_positions, tick_labels)
+    
     plt.tight_layout()
     
     if save_as:
@@ -389,7 +530,7 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         plt.show()
 
 def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
-                         xlim=(2.8, 3.1), ylim=(-0.7, 0.7), figsize=(16, 2), save_as=None):
+                         xlim=None, ylim=(-0.7, 0.7), figsize=(16, 2), save_as=None):
     """
     Plot comparison panels for different layer numbers.
     
@@ -432,10 +573,41 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
             ax.set_yticks([])
         
         ax.set_title(f"{N} L")
-        ax.set_xlim(xlim)
+        if xlim is None:
+            # Default: focus around K point (at x=0) along Γ→K→M direction
+            k_range = k_mag.max() - k_mag.min()
+            ax.set_xlim(-0.15 * k_range, 0.15 * k_range)  # ±15% of total range around K
+        else:
+            ax.set_xlim(xlim)
         ax.set_ylim(ylim)
-        ax.set_xticks([])
-        ax.set_xlabel("K")
+        
+        # Add high-symmetry point labels on x-axis for bottom panels
+        current_xlim = ax.get_xlim()
+        gamma_pos = k_mag.min()  # Γ at leftmost position
+        k_pos = 0.0              # K at center (x=0)
+        m_pos = k_mag.max()      # M at rightmost position
+        
+        # Only show labels for points within current view
+        tick_positions = []
+        tick_labels = []
+        if current_xlim[0] <= gamma_pos <= current_xlim[1]:
+            tick_positions.append(gamma_pos)
+            tick_labels.append('Γ')
+        if current_xlim[0] <= k_pos <= current_xlim[1]:
+            tick_positions.append(k_pos)
+            tick_labels.append('K')
+        if current_xlim[0] <= m_pos <= current_xlim[1]:
+            tick_positions.append(m_pos)
+            tick_labels.append('M')
+        
+        if tick_positions:
+            ax.set_xticks(tick_positions)
+            ax.set_xticklabels(tick_labels)
+        else:
+            ax.set_xticks([])
+        
+        if i == len(N_range) // 2:  # Add xlabel to middle panel
+            ax.set_xlabel("k along Γ → K → M")
     
     plt.tight_layout()
     
