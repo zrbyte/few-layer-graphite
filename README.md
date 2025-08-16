@@ -1,6 +1,7 @@
 # Multilayer Graphene Band Structure Calculator
 
 Calculating the bands of few layer graphite in a TB model, beyond the nearest neighbour.
+**THIS IS JUST FOR VISUALIZATION PURPOSES!** The parameters were not fitted to ab initio, or checked regarding the fins structure of the low energy bands. So on energy scales of the order of the nnn hoppings, the bands may not be correct (almost certainly are not).
 
 ## Simple example
 
