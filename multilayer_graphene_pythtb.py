@@ -40,7 +40,7 @@ stacking = 'abc'       # 'abc' for rhombohedral or 'aba' for Bernal
 # k-path configuration around K point
 K_point = np.array([1/3, 1/3], float)  # K point in reciprocal lattice units
 dk = 1.5              # Legacy: k-space range around K (kept for API compatibility)
-n_k = 1500            # Number of k-points along default path
+n_k = 3000            # Number of k-points along default path
 d_cc = 1.42           # Carbon-carbon distance (Å)
 
 # =============================================================================

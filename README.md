@@ -38,11 +38,18 @@ Don't worry, the defaults are sensible! But if you're feeling adventurous:
 
 ### The k-Space Details
 - `K_point`: Where's the K point? (default: [1/3, 1/3])
-- `dk`: Legacy range around K (kept for API compatibility)
+`- `dk`: Legacy range around K (kept for API compatibility)
 - `n_k`: How many k-points along the default path (default: 1500)
 - `d_cc`: Carbon-carbon bond length in Å (default: 1.42)
 
 By default, band plots now use the high-symmetry path Γ → K → M, and the x-axis is the arc length along this path with the K point centered at 0 (Γ at negative x, M at positive x). You can override x-limits via the `xlim` argument.
+
+### Movie Generation
+- `make_movie.py [framerate] [stacking_type] [max_layers]`: Creates both WebM video and animated GIF for maximum compatibility.
+  - `python make_movie.py 2 abc` - 2 fps, ABC stacking, 30 layers
+  - `python make_movie.py 5 aba 20` - 5 fps, ABA stacking, 20 layers
+  - `python make_movie.py 1 abc 5` - Quick test with 5 layers
+  - Requires: ffmpeg (for WebM) and Pillow (for GIF)
 
 ## What Can You Do With It?
 

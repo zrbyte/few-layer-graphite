@@ -6,6 +6,15 @@ __pycache__/
 # images
 *.png
 *.svg
+*.gif
+*.mp4
+*.webm
+
+# temporary movie generation files
+frames_*/
+webm_frames_*/
+gif_frames_*/
+test_frames/
 
 # C extensions
 *.so
@@ -157,3 +166,5 @@ Network Trash Folder
 Temporary Items
 .apdisk
 few-layer-graphite.code-workspace
+multilayer_graphene_aba_5.0fps.gif
+.gitignore
