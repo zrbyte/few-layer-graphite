@@ -105,7 +105,8 @@ def build_model_abc(N=None):
     # Set on-site energies
     EA, EB = E0 + Delta, E0
     for n in range(N):
-        model.set_onsite([EA, EB], [2*n, 2*n+1])  # A and B sublattices for layer n
+        model.set_onsite(EA, 2*n)      # A sublattice for layer n
+        model.set_onsite(EB, 2*n+1)    # B sublattice for layer n
     
     # Intralayer hopping: γ0 with structure factor
     # In PythTB, we need to set hoppings for each k-dependent term
@@ -173,7 +174,8 @@ def build_model_aba(N=None):
     # Set on-site energies
     EA, EB = E0 + Delta, E0
     for n in range(N):
-        model.set_onsite([EA, EB], [2*n, 2*n+1])  # A and B sublattices for layer n
+        model.set_onsite(EA, 2*n)      # A sublattice for layer n
+        model.set_onsite(EB, 2*n+1)    # B sublattice for layer n
     
     # Intralayer hopping: same as ABC
     for n in range(N):
@@ -287,8 +289,30 @@ def calculate_bands(N=None, stacking_type=None, k_path=None):
     # PythTB expects k-points as [k1, k2, ..., kn] where each ki is [kx, ky]
     eigenvals = model.solve_all(k_path_recip)
     
-    # Sort eigenvalues for each k-point
-    E = np.array([np.sort(evals.real) for evals in eigenvals])
+    # Debug: Check the shape and type of eigenvals
+    print(f"DEBUG: eigenvals type: {type(eigenvals)}")
+    if hasattr(eigenvals, 'shape'):
+        print(f"DEBUG: eigenvals shape: {eigenvals.shape}")
+        print(f"DEBUG: k_path_recip shape: {k_path_recip.shape}")
+        print(f"DEBUG: Expected shape: ({len(k_path_recip)}, {2*N})")
+    
+    # PythTB solve_all returns (n_bands, n_kpts) but we need (n_kpts, n_bands)
+    if hasattr(eigenvals, 'shape'):
+        if eigenvals.shape[0] == 2*N and eigenvals.shape[1] == len(k_path_recip):
+            # Shape is (n_bands, n_kpts) - transpose needed
+            E = np.sort(eigenvals.real.T, axis=1)
+        elif eigenvals.shape[0] == len(k_path_recip) and eigenvals.shape[1] == 2*N:
+            # Shape is already (n_kpts, n_bands) - just sort
+            E = np.sort(eigenvals.real, axis=1)
+        else:
+            print(f"DEBUG: Unexpected shape {eigenvals.shape}")
+            E = np.sort(eigenvals.real, axis=1)
+    else:
+        # List of arrays - convert to (n_kpts, n_bands)
+        E = np.array([np.sort(evals.real) for evals in eigenvals])
+    
+    print(f"DEBUG: Final E shape: {E.shape}")
+    print(f"DEBUG: k_mag shape: {k_mag.shape}")
     
     return E, k_mag
 
@@ -349,7 +373,7 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
     
     for b in range(nb):
         lw = 0.8 if b in mid else 0.5
-        plt.plot(k_mag, E[:,b], linewidth=lw)
+        plt.plot(k_mag, E[:,b], linewidth=lw, color='black')  # Plot all bands in black
     
     plt.ylabel("Energy (eV)")
     plt.title(f"{stacking_type.upper()} | Grüneis TB–GW | {N}-layer (PythTB)")

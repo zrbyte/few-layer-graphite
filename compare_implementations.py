@@ -127,7 +127,7 @@ def plot_comparison():
     mid = [nb//2-1, nb//2]
     for b in range(nb):
         lw = 0.8 if b in mid else 0.5
-        ax1.plot(k_mag, E_direct[:,b], 'b-', linewidth=lw)
+        ax1.plot(k_mag, E_direct[:,b], 'k-', linewidth=lw)  # Changed to black
     ax1.set_title("Direct Matrix Implementation")
     ax1.set_ylabel("Energy (eV)")
     ax1.set_xlim([2.8, 3.1])
@@ -137,7 +137,7 @@ def plot_comparison():
     ax2 = axes[1]
     for b in range(nb):
         lw = 0.8 if b in mid else 0.5
-        ax2.plot(k_mag, E_pythtb[:,b], 'r-', linewidth=lw)
+        ax2.plot(k_mag, E_pythtb[:,b], 'k-', linewidth=lw)  # Changed to black
     ax2.set_title("PythTB Implementation")
     ax2.set_xlim([2.8, 3.1])
     ax2.set_ylim([-0.5, 0.5])
@@ -148,7 +148,7 @@ def plot_comparison():
     E_diff = E_direct - E_pythtb
     for b in range(nb):
         lw = 0.8 if b in mid else 0.5
-        ax3.plot(k_mag, E_diff[:,b], 'g-', linewidth=lw)
+        ax3.plot(k_mag, E_diff[:,b], 'k-', linewidth=lw)  # Changed to black
     ax3.set_title("Difference (Direct - PythTB)")
     ax3.set_ylabel("Energy Difference (eV)")
     ax3.set_xlim([2.8, 3.1])
@@ -194,8 +194,8 @@ def benchmark_performance():
     # Plot performance comparison
     plt.figure(figsize=(10, 6))
     plt.subplot(1, 2, 1)
-    plt.plot(layer_counts, times_direct, 'bo-', label='Direct Matrix')
-    plt.plot(layer_counts, times_pythtb, 'ro-', label='PythTB')
+    plt.plot(layer_counts, times_direct, 'ko-', label='Direct Matrix')  # Changed to black
+    plt.plot(layer_counts, times_pythtb, 'k^-', label='PythTB')  # Changed to black with different marker
     plt.xlabel('Number of Layers')
     plt.ylabel('Calculation Time (s)')
     plt.title('Performance Comparison')
@@ -204,7 +204,7 @@ def benchmark_performance():
     
     plt.subplot(1, 2, 2)
     ratios = [t_pythtb/t_direct for t_pythtb, t_direct in zip(times_pythtb, times_direct)]
-    plt.plot(layer_counts, ratios, 'go-')
+    plt.plot(layer_counts, ratios, 'ko-')  # Changed to black
     plt.xlabel('Number of Layers')
     plt.ylabel('Speed Ratio (PythTB/Direct)')
     plt.title('Relative Performance')

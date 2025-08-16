@@ -314,7 +314,7 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
     
     for b in range(nb):
         lw = 0.8 if b in mid else 0.5
-        plt.plot(k_mag, E[:,b], linewidth=lw)
+        plt.plot(k_mag, E[:,b], linewidth=lw, color='black')  # Plot all bands in black
     
     plt.ylabel("Energy (eV)")
     plt.title(f"{stacking_type.upper()} | Grüneis TB–GW | {N}-layer")

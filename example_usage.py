@@ -45,7 +45,7 @@ def main():
     mid_abc = [nb_abc//2-1, nb_abc//2]
     for b in range(nb_abc):
         lw = 0.8 if b in mid_abc else 0.5
-        ax1.plot(k_mag, E_abc[:,b], linewidth=lw)
+        ax1.plot(k_mag, E_abc[:,b], linewidth=lw, color='black')  # Plot in black
     ax1.set_ylabel("Energy (eV)")
     ax1.set_xlim([2.8, 3.1])
     ax1.set_ylim([-0.5, 0.5])
@@ -56,7 +56,7 @@ def main():
     mid_aba = [nb_aba//2-1, nb_aba//2]
     for b in range(nb_aba):
         lw = 0.8 if b in mid_aba else 0.5
-        ax2.plot(k_mag, E_aba[:,b], linewidth=lw)
+        ax2.plot(k_mag, E_aba[:,b], linewidth=lw, color='black')  # Plot in black
     ax2.set_ylabel("Energy (eV)")
     ax2.set_xlim([2.8, 3.1])
     ax2.set_ylim([-0.5, 0.5])
@@ -86,7 +86,7 @@ def main():
     # Original
     ax1.set_title("2-layer ABA (γ₁ = 0.403 eV)")
     for b in range(E_orig.shape[1]):
-        ax1.plot(k_mag, E_orig[:,b], linewidth=0.8)
+        ax1.plot(k_mag, E_orig[:,b], linewidth=0.8, color='black')  # Plot in black
     ax1.set_ylabel("Energy (eV)")
     ax1.set_xlim([2.8, 3.1])
     ax1.set_ylim([-0.5, 0.5])
@@ -94,7 +94,7 @@ def main():
     # Modified
     ax2.set_title("2-layer ABA (γ₁ = 0.600 eV)")
     for b in range(E_mod.shape[1]):
-        ax2.plot(k_mag, E_mod[:,b], linewidth=0.8)
+        ax2.plot(k_mag, E_mod[:,b], linewidth=0.8, color='black')  # Plot in black
     ax2.set_ylabel("Energy (eV)")
     ax2.set_xlim([2.8, 3.1])
     ax2.set_ylim([-0.5, 0.5])
