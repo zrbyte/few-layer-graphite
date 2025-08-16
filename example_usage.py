@@ -4,6 +4,9 @@ Example usage of the multilayer_graphene module.
 
 This script demonstrates how to use the unified multilayer graphene
 band structure calculator with global configuration variables.
+
+Note: For PythTB-based implementation, see multilayer_graphene_pythtb.py
+and compare_implementations.py for detailed comparison between approaches.
 """
 
 import multilayer_graphene as mlg

@@ -110,3 +110,22 @@ E, k_mag = mlg.calculate_bands()
 
 - NumPy
 - Matplotlib
+
+## Alternative Implementation
+
+A PythTB-based implementation is also available in `multilayer_graphene_pythtb.py` that provides the same functionality using the PythTB tight-binding framework. This offers:
+
+- Integration with the established PythTB ecosystem
+- Built-in model validation and analysis tools
+- Extensibility to other tight-binding models
+
+To use the PythTB implementation:
+```python
+import multilayer_graphene_pythtb as mlg_pythtb
+
+# Same API as the direct implementation
+mlg_pythtb.set_parameters(N_layers=3, stacking='abc')
+mlg_pythtb.plot_bands()
+```
+
+See `compare_implementations.py` for detailed comparison between both approaches.
