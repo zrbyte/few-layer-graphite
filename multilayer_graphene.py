@@ -813,9 +813,32 @@ def plot_band_density(band_index, N=None, stacking_type=None,
     b = int(band_index) % (2 * N)
     Z = E[..., b]
     
+    # Determine colormap limits from the actual data
+    if vmin is None or vmax is None:
+        if xlim is not None and ylim is not None:
+            # Find data points within the display limits
+            mask = ((kx_cart >= xlim[0]) & (kx_cart <= xlim[1]) & 
+                   (ky_cart >= ylim[0]) & (ky_cart <= ylim[1]))
+            if np.any(mask):
+                Z_visible = Z[mask]
+                auto_vmin = np.min(Z_visible) if vmin is None else vmin
+                auto_vmax = np.max(Z_visible) if vmax is None else vmax
+            else:
+                # Fallback if no points in display region
+                auto_vmin = np.min(Z) if vmin is None else vmin
+                auto_vmax = np.max(Z) if vmax is None else vmax
+        else:
+            # Use full data range
+            auto_vmin = np.min(Z) if vmin is None else vmin
+            auto_vmax = np.max(Z) if vmax is None else vmax
+        
+        print(f"Auto colormap range: [{auto_vmin:.4f}, {auto_vmax:.4f}] eV")
+    else:
+        auto_vmin, auto_vmax = vmin, vmax
+    
     # Create the plot
     fig, ax = plt.subplots(figsize=figsize)
-    mesh = ax.pcolormesh(kx_cart, ky_cart, Z, cmap=cmap, shading=shading, vmin=vmin, vmax=vmax)
+    mesh = ax.pcolormesh(kx_cart, ky_cart, Z, cmap=cmap, shading=shading, vmin=auto_vmin, vmax=auto_vmax)
     ax.set_xlabel('k_x (Å⁻¹)')
     ax.set_ylabel('k_y (Å⁻¹)')
     ax.set_aspect('equal')
