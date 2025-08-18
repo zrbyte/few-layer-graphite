@@ -165,9 +165,12 @@ def get_brillouin_zone(plot=True, ax=None, annotate=True, figsize=(4, 4), save_a
         'ax': ax if plot else None,
     }
 
-def get_k_path():
+def get_k_path(path_type='gkm'):
     """
-    Default k-path Γ → K → M with K shifted to x = 0.
+    Generate k-path with K shifted to x = 0.
+
+    Args:
+        path_type: 'gkm' for Γ → K → M (default) or 'gkg' for Γ → K → Γ
 
     Returns:
         tuple: (k_path_recip, k_mag)
@@ -187,36 +190,72 @@ def get_k_path():
 
     Gamma_c, K_c, M_c = f2c(Gamma_f), f2c(K_f), f2c(M_f)
 
-    # Allocate points proportionally to segment lengths (keep total n_k)
-    L1 = np.linalg.norm(K_c - Gamma_c)
-    L2 = np.linalg.norm(M_c - K_c)
-    n1 = max(2, int(round(n_k * L1 / (L1 + L2))))
-    n2 = max(2, n_k - n1)
+    if path_type.lower() == 'gkm':
+        # Γ → K → M path
+        # Allocate points proportionally to segment lengths (keep total n_k)
+        L1 = np.linalg.norm(K_c - Gamma_c)
+        L2 = np.linalg.norm(M_c - K_c)
+        n1 = max(2, int(round(n_k * L1 / (L1 + L2))))
+        n2 = max(2, n_k - n1)
 
-    # Build path in fractional coordinates; include K once at segment junction
-    seg1 = np.column_stack([
-        np.linspace(Gamma_f[0], K_f[0], n1, endpoint=False),
-        np.linspace(Gamma_f[1], K_f[1], n1, endpoint=False),
-    ])
-    seg2 = np.column_stack([
-        np.linspace(K_f[0], M_f[0], n2),
-        np.linspace(K_f[1], M_f[1], n2),
-    ])
-    k_path_recip = np.vstack([seg1, seg2])
+        # Build path in fractional coordinates; include K once at segment junction
+        seg1 = np.column_stack([
+            np.linspace(Gamma_f[0], K_f[0], n1, endpoint=False),
+            np.linspace(Gamma_f[1], K_f[1], n1, endpoint=False),
+        ])
+        seg2 = np.column_stack([
+            np.linspace(K_f[0], M_f[0], n2),
+            np.linspace(K_f[1], M_f[1], n2),
+        ])
+        k_path_recip = np.vstack([seg1, seg2])
 
-    # Cartesian coordinates along the polyline (Å⁻¹)
-    k_cart = k_path_recip @ np.vstack([b1, b2])
+        # Cartesian coordinates along the polyline (Å⁻¹)
+        k_cart = k_path_recip @ np.vstack([b1, b2])
 
-    # Cumulative arc-length along Γ→K→M
-    deltas = np.vstack([[0.0, 0.0], np.diff(k_cart, axis=0)])
-    s = np.cumsum(np.linalg.norm(deltas, axis=1))
+        # Cumulative arc-length along Γ→K→M
+        deltas = np.vstack([[0.0, 0.0], np.diff(k_cart, axis=0)])
+        s = np.cumsum(np.linalg.norm(deltas, axis=1))
 
-    # Index of K is at the junction (end of seg1)
-    idx_K = seg1.shape[0]
-    s_K = s[idx_K]
+        # Index of K is at the junction (end of seg1)
+        idx_K = seg1.shape[0]
+        s_K = s[idx_K]
 
-    # Shift so that K maps to x = 0; Γ negative, M positive
-    k_mag = s - s_K
+        # Shift so that K maps to x = 0; Γ negative, M positive
+        k_mag = s - s_K
+
+    elif path_type.lower() == 'gkg':
+        # Γ → K → Γ path
+        # Allocate points equally between the two segments
+        n1 = max(2, n_k // 2)
+        n2 = max(2, n_k - n1)
+
+        # Build path in fractional coordinates
+        seg1 = np.column_stack([
+            np.linspace(Gamma_f[0], K_f[0], n1, endpoint=False),
+            np.linspace(Gamma_f[1], K_f[1], n1, endpoint=False),
+        ])
+        seg2 = np.column_stack([
+            np.linspace(K_f[0], Gamma_f[0], n2),
+            np.linspace(K_f[1], Gamma_f[1], n2),
+        ])
+        k_path_recip = np.vstack([seg1, seg2])
+
+        # Cartesian coordinates along the polyline (Å⁻¹)
+        k_cart = k_path_recip @ np.vstack([b1, b2])
+
+        # Cumulative arc-length along Γ→K→Γ
+        deltas = np.vstack([[0.0, 0.0], np.diff(k_cart, axis=0)])
+        s = np.cumsum(np.linalg.norm(deltas, axis=1))
+
+        # Index of K is at the junction (end of seg1)
+        idx_K = seg1.shape[0]
+        s_K = s[idx_K]
+
+        # Shift so that K maps to x = 0; Γ points negative and positive
+        k_mag = s - s_K
+
+    else:
+        raise ValueError(f"Unknown path_type: {path_type}. Use 'gkm' or 'gkg'.")
 
     return k_path_recip, k_mag
 
@@ -406,7 +445,7 @@ def build_hamiltonian(kx_rec, ky_rec, N=None, stacking_type=None):
 # Band Structure Calculation
 # =============================================================================
 
-def calculate_bands(N=None, stacking_type=None, k_path=None):
+def calculate_bands(N=None, stacking_type=None, k_path=None, path_type='gkm'):
     """
     Calculate band structure for multilayer graphene.
     
@@ -414,6 +453,7 @@ def calculate_bands(N=None, stacking_type=None, k_path=None):
         N: Number of layers (uses global N_layers if None)
         stacking_type: 'abc' or 'aba' (uses global stacking if None)
         k_path: (k_path_recip, k_mag) tuple (generates from globals if None)
+        path_type: 'gkm' for Γ → K → M (default) or 'gkg' for Γ → K → Γ
         
     Returns:
         tuple: (eigenvalues, k_mag) where eigenvalues has shape (n_k, 2N)
@@ -424,7 +464,7 @@ def calculate_bands(N=None, stacking_type=None, k_path=None):
     if stacking_type is None:
         stacking_type = stacking
     if k_path is None:
-        k_path_recip, k_mag = get_k_path()
+        k_path_recip, k_mag = get_k_path(path_type)
     else:
         k_path_recip, k_mag = k_path
     
@@ -442,7 +482,7 @@ def calculate_bands(N=None, stacking_type=None, k_path=None):
 # =============================================================================
 
 def plot_bands(E=None, k_mag=None, N=None, stacking_type=None, 
-               xlim=None, ylim=(-0.5, 0.5), figsize=(5, 4),
+               path_type='gkm', xlim=None, ylim=(-0.5, 0.5), figsize=(5, 4),
                highlight_middle=True, save_as=None):
     """
     Plot band structure for single layer number.
@@ -452,13 +492,14 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         k_mag: k-magnitude array for x-axis (calculates if None)
         N: Number of layers (uses global N_layers if None)
         stacking_type: 'abc' or 'aba' (uses global stacking if None)
+        path_type: 'gkm' for Γ → K → M (default) or 'gkg' for Γ → K → Γ
         xlim, ylim: Plot limits
         figsize: Figure size
         highlight_middle: Whether to highlight middle bands with thicker lines
         save_as: Filename to save plot (e.g., 'bands.svg', 'bands.png'). If None, just show.
     """
     if E is None or k_mag is None:
-        E, k_mag = calculate_bands(N, stacking_type)
+        E, k_mag = calculate_bands(N, stacking_type, k_path=get_k_path(path_type))
     if N is None:
         N = N_layers
     if stacking_type is None:
@@ -474,10 +515,18 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         plt.plot(k_mag, E[:,b], linewidth=lw, color=col)  # Plot all bands in black
     
     plt.ylabel("Energy (eV)")
-    plt.xlabel("k along Γ → K → M")
+    
+    # Set x-axis label based on path type
+    if path_type.lower() == 'gkm':
+        plt.xlabel("k along Γ → K → M")
+    elif path_type.lower() == 'gkg':
+        plt.xlabel("k along Γ → K → Γ")
+    else:
+        plt.xlabel("k along path")
+    
     plt.title(f"{stacking_type.upper()} | {N}-layer")
     if xlim is None:
-        # Default: focus around K point (at x=0) along Γ→K→M direction
+        # Default: focus around K point (at x=0) along the path direction
         k_range = k_mag.max() - k_mag.min()
         plt.xlim(-0.15 * k_range, 0.15 * k_range)  # ±15% of total range around K
     else:
@@ -488,7 +537,11 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
     current_xlim = plt.gca().get_xlim()
     gamma_pos = k_mag.min()  # Γ at leftmost position
     k_pos = 0.0              # K at center (x=0)
-    m_pos = k_mag.max()      # M at rightmost position
+    
+    if path_type.lower() == 'gkm':
+        m_pos = k_mag.max()  # M at rightmost position
+    else:  # gkg
+        m_pos = k_mag.max()  # Second Γ at rightmost position
     
     # Only show labels for points within current view
     tick_positions = []
@@ -501,7 +554,10 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         tick_labels.append('K')
     if current_xlim[0] <= m_pos <= current_xlim[1]:
         tick_positions.append(m_pos)
-        tick_labels.append('M')
+        if path_type.lower() == 'gkm':
+            tick_labels.append('M')
+        else:  # gkg
+            tick_labels.append('Γ')
     
     if tick_positions:
         plt.xticks(tick_positions, tick_labels)
@@ -514,7 +570,7 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
     else:
         plt.show()
 
-def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
+def plot_panel_comparison(N_range=range(1, 9), stacking_type=None, path_type='gkm',
                          xlim=None, ylim=(-0.7, 0.7), figsize=(16, 2), save_as=None):
     """
     Plot comparison panels for different layer numbers.
@@ -522,6 +578,7 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
     Args:
         N_range: Range of layer numbers to plot
         stacking_type: 'abc' or 'aba' (uses global stacking if None)
+        path_type: 'gkm' for Γ → K → M (default) or 'gkg' for Γ → K → Γ
         xlim, ylim: Plot limits
         figsize: Figure size
         save_as: Filename to save plot (e.g., 'comparison.svg', 'comparison.png'). If None, just show.
@@ -530,7 +587,7 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
         stacking_type = stacking
     
     # Calculate all band structures
-    k_path_recip, k_mag = get_k_path()
+    k_path_recip, k_mag = get_k_path(path_type)
     bandsets = {}
     for N in N_range:
         E, _ = calculate_bands(N, stacking_type, (k_path_recip, k_mag))
@@ -570,7 +627,11 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
         current_xlim = ax.get_xlim()
         gamma_pos = k_mag.min()  # Γ at leftmost position
         k_pos = 0.0              # K at center (x=0)
-        m_pos = k_mag.max()      # M at rightmost position
+        
+        if path_type.lower() == 'gkm':
+            m_pos = k_mag.max()  # M at rightmost position
+        else:  # gkg
+            m_pos = k_mag.max()  # Second Γ at rightmost position
         
         # Only show labels for points within current view
         tick_positions = []
@@ -583,7 +644,10 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
             tick_labels.append('K')
         if current_xlim[0] <= m_pos <= current_xlim[1]:
             tick_positions.append(m_pos)
-            tick_labels.append('M')
+            if path_type.lower() == 'gkm':
+                tick_labels.append('M')
+            else:  # gkg
+                tick_labels.append('Γ')
         
         if tick_positions:
             ax.set_xticks(tick_positions)
@@ -592,7 +656,12 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None,
             ax.set_xticks([])
         
         if i == len(N_range) // 2:  # Add xlabel to middle panel
-            ax.set_xlabel("k along Γ → K → M")
+            if path_type.lower() == 'gkm':
+                ax.set_xlabel("k along Γ → K → M")
+            elif path_type.lower() == 'gkg':
+                ax.set_xlabel("k along Γ → K → Γ")
+            else:
+                ax.set_xlabel("k along path")
     
     plt.tight_layout()
     
