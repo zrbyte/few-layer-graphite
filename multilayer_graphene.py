@@ -475,7 +475,7 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
     
     plt.ylabel("Energy (eV)")
     plt.xlabel("k along Γ → K → M")
-    plt.title(f"{stacking_type.upper()} | Grüneis TB–GW | {N}-layer")
+    plt.title(f"{stacking_type.upper()} | {N}-layer")
     if xlim is None:
         # Default: focus around K point (at x=0) along Γ→K→M direction
         k_range = k_mag.max() - k_mag.min()

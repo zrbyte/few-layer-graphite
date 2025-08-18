@@ -16,6 +16,9 @@ webm_frames_*/
 gif_frames_*/
 test_frames/
 
+# interactive visualization outputs
+interactive_bands_*.html
+
 # C extensions
 *.so
 

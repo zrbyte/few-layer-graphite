@@ -30,7 +30,7 @@ import multilayer_graphene as mlg
 
 # Try to import PIL for GIF creation
 try:
-    from PIL import Image
+    from PIL import Image # type: ignore
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
