@@ -16,6 +16,11 @@ Author: Generated from nnn-bands-ABC.py and nnn-bands-ABA.py
 
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
+try:
+    from tqdm import tqdm # type: ignore
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
 
 # =============================================================================
 # Global Configuration Variables
@@ -67,6 +72,20 @@ def _reciprocal_vectors():
     b2 = 2.0 * np.pi * np.array([a1[1], -a1[0]]) / cross_product
     
     return b1, b2
+
+def _frac_to_cart(frac):
+    """
+    Convert fractional reciprocal coordinates (relative to b1, b2) to Cartesian (Å⁻¹).
+
+    Args:
+        frac: (..., 2) array-like fractional coordinates
+
+    Returns:
+        ndarray: (..., 2) Cartesian coordinates in Å⁻¹
+    """
+    b1, b2 = _reciprocal_vectors()
+    frac = np.asarray(frac, dtype=float)
+    return frac[..., 0:1] * b1 + frac[..., 1:2] * b2
 
 def get_brillouin_zone(plot=True, ax=None, annotate=True, figsize=(4, 4), save_as=None, show=True):
     """
@@ -668,6 +687,155 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None, path_type='gk
     if save_as:
         plt.savefig(save_as, bbox_inches='tight', dpi=300)  # High quality save with tight bbox
         print(f"Plot saved as: {save_as}")  # Confirm save
+    else:
+        plt.show()
+
+def plot_band_density(band_index, N=None, stacking_type=None, 
+                      center_frac=(1/3, 2/3), half_width_frac=0.12, resolution=0.0008,
+                      fast=False, xlim=None, ylim=None,
+                      cmap='viridis', shading='auto', vmin=None, vmax=None,
+                      figsize=(5, 4), save_as=None):
+    """
+    Plot a 2D density map E_b(k_x, k_y) of a specific band around a center point.
+    
+    Args:
+        band_index: Integer index of the band to plot (0-based; wraps modulo total bands)
+        N: Number of layers (uses global N_layers if None)
+        stacking_type: 'abc' or 'aba' (uses global stacking if None)
+        center_frac: Center of grid in fractional reciprocal units (default near K: (1/3, 2/3))
+        half_width_frac: Half-width of the grid box in fractional units (controls k-space coverage)
+        resolution: Spacing between k-points in fractional units (controls grid density)
+        fast: If True, use coarser resolution for faster computation
+        xlim, ylim: Limits in Cartesian Å⁻¹ (tuples). If None, set from grid extents.
+        cmap, shading, vmin, vmax: Matplotlib pcolormesh parameters
+        figsize: Figure size
+        save_as: Optional path to save the figure
+    """
+    if N is None:
+        N = N_layers
+    if stacking_type is None:
+        stacking_type = stacking
+    
+    center_frac = np.asarray(center_frac, dtype=float)
+    
+    # Adjust parameters for fast mode
+    if fast:
+        resolution = resolution * 4  # Coarser resolution for speed
+        print(f"Fast mode: using coarser resolution = {resolution:.4f}")
+    
+    # Determine the actual calculation region
+    if xlim is not None or ylim is not None:
+        # Convert xlim/ylim (Cartesian Å⁻¹) to fractional coordinates to determine calculation bounds
+        b1, b2 = _reciprocal_vectors()
+        
+        if xlim is not None and ylim is not None:
+            # Convert corner points to fractional coordinates
+            corners_cart = np.array([
+                [xlim[0], ylim[0]], [xlim[1], ylim[0]], 
+                [xlim[0], ylim[1]], [xlim[1], ylim[1]]
+            ])
+            # Transform to fractional: solve [b1, b2] @ frac = cart
+            B_matrix = np.vstack([b1, b2]).T
+            corners_frac = np.linalg.solve(B_matrix, corners_cart.T).T
+            
+            # Find bounding box in fractional coordinates
+            kx_min, kx_max = corners_frac[:, 0].min(), corners_frac[:, 0].max()
+            ky_min, ky_max = corners_frac[:, 1].min(), corners_frac[:, 1].max()
+            
+            # Add small buffer to ensure we cover the display region
+            buffer_frac = resolution * 2
+            kx_min -= buffer_frac
+            kx_max += buffer_frac
+            ky_min -= buffer_frac
+            ky_max += buffer_frac
+            
+            print(f"Limiting calculation to display region: xlim={xlim}, ylim={ylim}")
+        else:
+            # Only one limit specified - use default coverage for the other
+            kx_min = center_frac[0] - half_width_frac
+            kx_max = center_frac[0] + half_width_frac
+            ky_min = center_frac[1] - half_width_frac
+            ky_max = center_frac[1] + half_width_frac
+            print(f"Using partial display limits with default coverage")
+    else:
+        # No display limits - use full coverage
+        kx_min = center_frac[0] - half_width_frac
+        kx_max = center_frac[0] + half_width_frac
+        ky_min = center_frac[1] - half_width_frac
+        ky_max = center_frac[1] + half_width_frac
+    
+    # Calculate grid size from resolution and actual calculation bounds
+    n_kx = max(2, int(np.ceil((kx_max - kx_min) / resolution)) + 1)
+    n_ky = max(2, int(np.ceil((ky_max - ky_min) / resolution)) + 1)
+    
+    # Report what we're computing
+    coverage_x = kx_max - kx_min
+    coverage_y = ky_max - ky_min
+    total_points = n_kx * n_ky
+    print(f"Computing {n_kx}×{n_ky} = {total_points:,} k-points")
+    print(f"Coverage: {coverage_x:.3f}×{coverage_y:.3f} fractional units, resolution = {resolution:.4f}")
+    
+    # Create k-grid in fractional coordinates
+    kx_lin = np.linspace(kx_min, kx_max, n_kx)
+    ky_lin = np.linspace(ky_min, ky_max, n_ky)
+    kx_rec, ky_rec = np.meshgrid(kx_lin, ky_lin, indexing='xy')
+    
+    # Convert to Cartesian for plotting
+    k_cart = _frac_to_cart(np.dstack([kx_rec, ky_rec]))
+    kx_cart, ky_cart = k_cart[..., 0], k_cart[..., 1]
+    
+    # Compute energies on the grid
+    E = np.empty((n_ky, n_kx, 2 * N), dtype=float)
+    total_points = n_kx * n_ky
+    
+    # Use progress bar for large computations
+    if HAS_TQDM and total_points > 5000:
+        # Use tqdm progress bar
+        with tqdm(total=n_ky, desc="Computing bands", unit="row") as pbar:
+            for iy in range(n_ky):
+                for ix in range(n_kx):
+                    H = build_hamiltonian(kx_rec[iy, ix], ky_rec[iy, ix], N=N, stacking_type=stacking_type)
+                    evals = np.linalg.eigvalsh(H)
+                    E[iy, ix, :] = np.sort(evals.real)
+                pbar.update(1)
+    else:
+        # Simple computation without progress bar
+        if total_points > 20000:
+            print(f"Computing band structure on {n_kx}×{n_ky} = {total_points:,} k-points...")
+        
+        for iy in range(n_ky):
+            for ix in range(n_kx):
+                H = build_hamiltonian(kx_rec[iy, ix], ky_rec[iy, ix], N=N, stacking_type=stacking_type)
+                evals = np.linalg.eigvalsh(H)
+                E[iy, ix, :] = np.sort(evals.real)
+    
+    # Select the band
+    b = int(band_index) % (2 * N)
+    Z = E[..., b]
+    
+    # Create the plot
+    fig, ax = plt.subplots(figsize=figsize)
+    mesh = ax.pcolormesh(kx_cart, ky_cart, Z, cmap=cmap, shading=shading, vmin=vmin, vmax=vmax)
+    ax.set_xlabel('k_x (Å⁻¹)')
+    ax.set_ylabel('k_y (Å⁻¹)')
+    ax.set_aspect('equal')
+    ax.set_title(f"{stacking_type.upper()} | {N}-layer | band {b}")
+    
+    # Set axis limits to match calculated region
+    if xlim is not None:
+        ax.set_xlim(xlim)
+    if ylim is not None:
+        ax.set_ylim(ylim)
+    
+    # Add colorbar
+    cbar = fig.colorbar(mesh, ax=ax)
+    cbar.set_label('Energy (eV)')
+    
+    plt.tight_layout()
+    
+    if save_as:
+        plt.savefig(save_as, bbox_inches='tight', dpi=300)
+        print(f"Plot saved as: {save_as}")
     else:
         plt.show()
 
