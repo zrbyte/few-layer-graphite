@@ -34,7 +34,7 @@ gamma3 = 0.274   # interlayer skew (A_n <-> B_{n+1})
 gamma4 = 0.143   # interlayer like-sublattice (A<->A, B<->B) across adjacent layers
 gamma5 = 0.030   # next-nearest layer (B<->B)
 E0 = -0.025      # on-site shift
-Delta = -0.005   # A vs B on-site asymmetry
+Delta = 0   # A vs B on-site asymmetry
 
 # System configuration
 N_layers = 3           # Number of layers
