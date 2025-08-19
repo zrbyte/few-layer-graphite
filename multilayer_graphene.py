@@ -2,16 +2,20 @@
 Multilayer graphene band structure calculator
 
 This module provides functions to calculate band structures for multilayer graphene
-with both ABC (rhombohedral) and ABA (Bernal) stacking using Grüneis PRB 2008 parameters.
+with both ABC (rhombohedral) and ABA (Bernal) stacking using a simplified nearest-neighbor model.
+
+Uses only nearest-neighbor tight-binding parameters:
+- gamma0: Intralayer nearest-neighbor hopping (eV)
+- gamma1: Interlayer vertical dimer hopping (eV)
 
 Global configuration variables control the calculation parameters:
-- gamma0 to gamma5: Tight-binding parameters (eV)
+- gamma0, gamma1: Tight-binding parameters (eV)
 - E0, Delta: On-site energies (eV)
 - N_layers: Number of layers
 - stacking: 'abc' or 'aba'
 - k_path_config: k-point path configuration
 
-Author: Generated from nnn-bands-ABC.py and nnn-bands-ABA.py
+Author: Generated from nnn-bands-ABC.py and nnn-bands-ABA.py, simplified to nearest-neighbor
 """
 
 import numpy as np # type: ignore
@@ -26,15 +30,11 @@ except ImportError:
 # Global Configuration Variables
 # =============================================================================
 
-# Grüneis PRB 2008 (TB–GW) parameters [eV]
+# Nearest-neighbor tight-binding parameters [eV]
 gamma0 = 3.053   # intralayer nearest-neighbor
 gamma1 = 0.403   # interlayer vertical dimer
-gamma2 = -0.025  # next-nearest layer (A<->A)
-gamma3 = 0.274   # interlayer skew (A_n <-> B_{n+1})
-gamma4 = 0.143   # interlayer like-sublattice (A<->A, B<->B) across adjacent layers
-gamma5 = 0.030   # next-nearest layer (B<->B)
-E0 = -0.025      # on-site shift
-Delta = 0   # A vs B on-site asymmetry
+E0 = 0      # on-site shift
+Delta = 0        # A vs B on-site asymmetry
 
 # System configuration
 N_layers = 3           # Number of layers
@@ -295,11 +295,10 @@ def get_parameters():
     Get current tight-binding parameters as dictionary.
     
     Returns:
-        dict: Dictionary containing all gamma parameters and on-site energies
+        dict: Dictionary containing gamma parameters and on-site energies
     """
     return {
-        'gamma0': gamma0, 'gamma1': gamma1, 'gamma2': gamma2,
-        'gamma3': gamma3, 'gamma4': gamma4, 'gamma5': gamma5,
+        'gamma0': gamma0, 'gamma1': gamma1,
         'E0': E0, 'Delta': Delta
     }
 
@@ -311,7 +310,8 @@ def build_hamiltonian_abc(kx_rec, ky_rec, N=None):
     """
     Build Hamiltonian for ABC (rhombohedral) stacked multilayer graphene.
     
-    In ABC stacking, all adjacent layer couplings use T_plus matrix.
+    Uses only nearest-neighbor intralayer (gamma0) and interlayer vertical dimer (gamma1) coupling.
+    In ABC stacking, only the gamma1 coupling is used between adjacent layers.
     
     Args:
         kx_rec, ky_rec: k-coordinates in reciprocal lattice units
@@ -340,31 +340,14 @@ def build_hamiltonian_abc(kx_rec, ky_rec, N=None):
         H[iA, iB] += gamma0 * f
         H[iB, iA] += gamma0 * fc
     
-    # Adjacent layers: n -> n+1, always T_plus
-    # T_plus = [[γ4*f, γ3*f*], [γ1, γ4*f]]
+    # Adjacent layers: n -> n+1, only gamma1 coupling (B_n <-> A_{n+1})
     for n in range(N-1):
         iA, iB = 2*n, 2*n+1
         jA, jB = 2*(n+1), 2*(n+1)+1
         
-        H[iA, jA] += gamma4 * f
+        # Only vertical dimer coupling: B_n <-> A_{n+1}
         H[iB, jA] += gamma1
-        H[iA, jB] += gamma3 * fc
-        H[iB, jB] += gamma4 * f
-        
-        # Hermitian conjugate
-        H[jA, iA] = np.conj(H[iA, jA])
-        H[jA, iB] = np.conj(H[iB, jA])
-        H[jB, iA] = np.conj(H[iA, jB])
-        H[jB, iB] = np.conj(H[iB, jB])
-    
-    # Next-nearest layers: n -> n+2, diagonal coupling
-    for n in range(N-2):
-        iA, iB = 2*n, 2*n+1
-        kA, kB = 2*(n+2), 2*(n+2)+1
-        H[iA, kA] += gamma2
-        H[iB, kB] += gamma5
-        H[kA, iA] += gamma2
-        H[kB, iB] += gamma5
+        H[jA, iB] += gamma1
     
     return H
 
@@ -372,7 +355,8 @@ def build_hamiltonian_aba(kx_rec, ky_rec, N=None):
     """
     Build Hamiltonian for ABA (Bernal) stacked multilayer graphene.
     
-    In ABA stacking, adjacent layer couplings alternate between T_plus and T_minus.
+    Uses only nearest-neighbor intralayer (gamma0) and interlayer vertical dimer (gamma1) coupling.
+    In ABA stacking, the gamma1 coupling alternates between different sublattice pairs.
     
     Args:
         kx_rec, ky_rec: k-coordinates in reciprocal lattice units
@@ -401,38 +385,19 @@ def build_hamiltonian_aba(kx_rec, ky_rec, N=None):
         H[iA, iB] += gamma0 * f
         H[iB, iA] += gamma0 * fc
     
-    # Adjacent layers: n -> n+1, alternating T_plus and T_minus
+    # Adjacent layers: n -> n+1, alternating gamma1 coupling
     for n in range(N-1):
         iA, iB = 2*n, 2*n+1
         jA, jB = 2*(n+1), 2*(n+1)+1
         
         if n % 2 == 0:
-            # T_plus = [[γ4*f, γ3*f*], [γ1, γ4*f]]
-            H[iA, jA] += gamma4 * f
+            # Even layers: B_n <-> A_{n+1}
             H[iB, jA] += gamma1
-            H[iA, jB] += gamma3 * fc
-            H[iB, jB] += gamma4 * f
+            H[jA, iB] += gamma1
         else:
-            # T_minus = [[γ4*f*, γ1], [γ3*f, γ4*f*]]
-            H[iA, jA] += gamma4 * fc
+            # Odd layers: A_n <-> B_{n+1}
             H[iA, jB] += gamma1
-            H[iB, jA] += gamma3 * f
-            H[iB, jB] += gamma4 * fc
-        
-        # Hermitian conjugate
-        H[jA, iA] = np.conj(H[iA, jA])
-        H[jA, iB] = np.conj(H[iB, jA])
-        H[jB, iA] = np.conj(H[iA, jB])
-        H[jB, iB] = np.conj(H[iB, jB])
-    
-    # Next-nearest layers: n -> n+2, diagonal coupling
-    for n in range(N-2):
-        iA, iB = 2*n, 2*n+1
-        kA, kB = 2*(n+2), 2*(n+2)+1
-        H[iA, kA] += gamma2
-        H[iB, kB] += gamma5
-        H[kA, iA] += gamma2
-        H[kB, iB] += gamma5
+            H[jB, iA] += gamma1
     
     return H
 
@@ -871,9 +836,9 @@ def set_parameters(**kwargs):
     Set global parameters.
     
     Args:
-        **kwargs: Parameter name-value pairs (gamma0, gamma1, ..., N_layers, stacking, etc.)
+        **kwargs: Parameter name-value pairs (gamma0, gamma1, N_layers, stacking, etc.)
     """
-    global gamma0, gamma1, gamma2, gamma3, gamma4, gamma5, E0, Delta
+    global gamma0, gamma1, E0, Delta
     global N_layers, stacking, K_point, dk, n_k, d_cc
     
     for key, value in kwargs.items():
@@ -888,12 +853,8 @@ def get_info():
     print(f"Stacking: {stacking.upper()}")
     print(f"Layers: {N_layers}")
     print(f"\nTight-binding parameters (eV):")
-    print(f"  γ0 = {gamma0:7.3f}  (intralayer)")
-    print(f"  γ1 = {gamma1:7.3f}  (vertical dimer)")
-    print(f"  γ2 = {gamma2:7.3f}  (next-nearest A-A)")
-    print(f"  γ3 = {gamma3:7.3f}  (skew)")
-    print(f"  γ4 = {gamma4:7.3f}  (like-sublattice)")
-    print(f"  γ5 = {gamma5:7.3f}  (next-nearest B-B)")
+    print(f"  γ0 = {gamma0:7.3f}  (intralayer nearest-neighbor)")
+    print(f"  γ1 = {gamma1:7.3f}  (interlayer vertical dimer)")
     print(f"  E0 = {E0:7.3f}  (on-site shift)")
     print(f"  Δ  = {Delta:7.3f}  (A-B asymmetry)")
     print(f"\nk-path: {n_k} points, dk = {dk}, d_cc = {d_cc} Å")
