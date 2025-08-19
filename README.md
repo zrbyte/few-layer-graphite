@@ -59,21 +59,13 @@ By default, band plots now use the high-symmetry path Γ → K → M, and the x-
 ### Plotting
 - `plot_bands(...)`: Single band structure plot
 - `plot_panel_comparison(...)`: Side-by-side comparison panels
+- `plot_band_density(...)`: Density plot of a selected band.
 
 ### Brillouin Zone helpers
 - `get_brillouin_zone(plot=True, ax=None, annotate=True, figsize=(4,4), save_as=None, show=True)`: Returns a dictionary with reciprocal vectors (`b1`, `b2`), Γ, K and M points (both fractional and Cartesian), and the first Brillouin zone hexagon vertices (Å⁻¹). If `plot=True`, it also draws the BZ hexagon and marks Γ, K, and M; you can pass an existing Matplotlib `ax` to draw into, or let it create one.
 
 
-### The Math (For Those Who Care)
-
-We build a 2N×2N Hamiltonian matrix where N is the number of layers:
-- **Within each layer**: H₀ = [[E_A, γ₀f], [γ₀f*, E_B]] (the usual graphene stuff)
-- **Between neighboring layers**: T₊ or T₋ matrices (depends on the stacking)
-- **Next-nearest layers**: Simple diagonal terms with γ₂ and γ₅
-
-The structure factor f(k) = 1 + exp(i2πk_x) + exp(i2πk_y) captures the hexagonal lattice geometry.
-
-This is all based on the solid work from Grüneiss et al. (Physical Review B 78, 205425, 2008) - they did the heavy lifting on the tight-binding parameters.
+Based on the work from Grüneiss et al. (Physical Review B 78, 205425, 2008).
 
 ```python
 mlg.set_parameters(N_layers=N, stacking='abc', **params)
@@ -88,4 +80,3 @@ E, k_mag = mlg.calculate_bands()
 
 - NumPy (for the math)
 - Matplotlib (for the pretty plots)
-- optionally, Pythtb (There's also a PythTB-based version in `multilayer_graphene_pythtb.py` that does the same thing) 
