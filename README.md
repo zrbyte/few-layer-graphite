@@ -23,14 +23,9 @@ mlg.plot_panel_comparison(range(1, 9))
 ### Hoppings in eV
 Don't worry, the defaults are sensible! But if you're feeling adventurous:
 
-- `gamma0`: How carbons talk within a layer (default: 3.053)
-- `gamma1`: Vertical hopping between layers (default: 0.403)  
-- `gamma2`: Next-nearest A↔A coupling (default: -0.025)
-- `gamma3`: Skew hopping (default: 0.274)
-- `gamma4`: Like-sublattice coupling (default: 0.143)
-- `gamma5`: Next-nearest B↔B coupling (default: 0.030)
-- `E0`: Energy offset (default: -0.025)
-- `Delta`: A vs B asymmetry (default: -0.005)
+- `gamma0`: How carbons talk within a layer (default: 3.0)
+- `E0`: Energy offset (default: 0)
+- `Delta`: A vs B asymmetry (default: 0)
 
 ### The System Stuff
 - `N_layers`: How many layers? (default: 3)

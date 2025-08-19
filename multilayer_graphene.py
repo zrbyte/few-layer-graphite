@@ -555,7 +555,8 @@ def plot_bands(E=None, k_mag=None, N=None, stacking_type=None,
         plt.show()
 
 def plot_panel_comparison(N_range=range(1, 9), stacking_type=None, path_type='gkm',
-                         xlim=None, ylim=(-0.7, 0.7), figsize=(16, 2), save_as=None):
+                         xlim=None, ylim=(-0.7, 0.7), figsize=(16, 2), 
+                         highlight_middle=True, save_as=None):
     """
     Plot comparison panels for different layer numbers.
     
@@ -565,6 +566,7 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None, path_type='gk
         path_type: 'gkm' for Γ → K → M (default) or 'gkg' for Γ → K → Γ
         xlim, ylim: Plot limits
         figsize: Figure size
+        highlight_middle: Whether to highlight middle bands with thicker lines
         save_as: Filename to save plot (e.g., 'comparison.svg', 'comparison.png'). If None, just show.
     """
     if stacking_type is None:
@@ -586,7 +588,7 @@ def plot_panel_comparison(N_range=range(1, 9), stacking_type=None, path_type='gk
         ax = axes[i]
         E = bandsets[N]
         nb = E.shape[1]
-        mid = [nb//2-1, nb//2]
+        mid = [nb//2-1, nb//2] if highlight_middle else []
         
         for b in range(nb):
             lw = 0.6 if b in mid else 0.3
