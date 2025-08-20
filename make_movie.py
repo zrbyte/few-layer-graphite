@@ -2,7 +2,7 @@
 """
 Script to generate band structure movies for multilayer graphene.
 
-Creates individual plots for 1-30 layers and combines them into both
+Creates individual plots for 1-100 layers and combines them into both
 WebM video and animated GIF formats for maximum compatibility.
 
 Usage:
@@ -11,12 +11,12 @@ Usage:
 Arguments:
     framerate: frames per second (default: 2)
     stacking_type: 'abc' or 'aba' (default: 'abc')
-    max_layers: maximum number of layers (default: 30, max: 30)
+    max_layers: maximum number of layers (default: 20, max: 100)
 
 Examples:
-    python make_movie.py 5 abc       # 5 fps, ABC stacking, 30 layers
+    python make_movie.py 5 abc       # 5 fps, ABC stacking, 20 layers
     python make_movie.py 1.5 aba 20  # 1.5 fps, ABA stacking, 20 layers
-    python make_movie.py             # 2 fps, ABC stacking, 30 layers (defaults)
+    python make_movie.py             # 2 fps, ABC stacking, 20 layers (defaults)
 """
 
 import sys
@@ -83,7 +83,7 @@ def main():
     # Parse command line arguments
     framerate = 2.0  # Default framerate
     stacking_type = 'abc'  # Default stacking
-    max_layers = 30  # Default max layers
+    max_layers = 20  # Default max layers
     
     if len(sys.argv) > 1:
         try:
@@ -99,7 +99,7 @@ def main():
     
     if len(sys.argv) > 3:
         try:
-            max_layers = min(30, max(1, int(sys.argv[3])))
+            max_layers = min(100, max(1, int(sys.argv[3])))
         except ValueError:
             print(f"Error: Invalid max_layers '{sys.argv[3]}'. Using default {max_layers}.")
     
@@ -124,11 +124,7 @@ def main():
         # Calculate bands for this layer count
         mlg.set_parameters(
             N_layers=N,
-            gamma1 = 0.403,
-            gamma2 = -0.025,
-            gamma3 = 0.274,
-            gamma4 = 0.143,
-            gamma5 = 0.030
+            gamma1 = 0.403
         )
         E, k_mag = mlg.calculate_bands()
         
