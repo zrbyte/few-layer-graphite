@@ -1,7 +1,7 @@
 # Multilayer Graphene Band Structure Calculator
 
 Calculating the bands of few layer graphite in a TB model, beyond the nearest neighbour.
-**THIS IS JUST FOR VISUALIZATION PURPOSES!** The parameters were not fitted to ab initio, or checked regarding the fins structure of the low energy bands. So on energy scales of the order of the nnn hoppings, the bands may not be correct (almost certainly are not).
+**THIS IS JUST FOR VISUALIZATION PURPOSES!** The parameters were not fitted to ab initio, or checked regarding the final structure of the low energy bands. 
 
 ## Simple example
 
@@ -33,7 +33,6 @@ Don't worry, the defaults are sensible! But if you're feeling adventurous:
 
 ### The k-Space Details
 - `K_point`: Where's the K point? (default: [1/3, 1/3])
-`- `dk`: Legacy range around K (kept for API compatibility)
 - `n_k`: How many k-points along the default path (default: 1500)
 - `d_cc`: Carbon-carbon bond length in Å (default: 1.42)
 
