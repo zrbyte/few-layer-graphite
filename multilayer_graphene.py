@@ -1,21 +1,28 @@
 """
 Multilayer graphene band structure calculator
 
-This module provides functions to calculate band structures for multilayer graphene
-with both ABC (rhombohedral) and ABA (Bernal) stacking using a simplified nearest-neighbor model.
+This module provides functions to calculate band structures for multilayer
+graphene with both ABC (rhombohedral) and ABA (Bernal) stacking using a
+Slonczewski–Weiss–McClure (SWMC) tight‑binding model.  The implementation
+supports the five interlayer hopping terms beyond the intralayer coupling.
 
-Uses only nearest-neighbor tight-binding parameters:
-- gamma0: Intralayer nearest-neighbor hopping (eV)
+Included tight‑binding parameters:
+- gamma0: Intralayer nearest‑neighbor hopping (eV)
 - gamma1: Interlayer vertical dimer hopping (eV)
+- gamma2: Next‑nearest layer A–A hopping (eV)
+- gamma3: Interlayer skew Aₙ ↔ Bₙ₊₁ hopping (eV)
+- gamma4: Interlayer like‑sublattice hopping (eV)
+- gamma5: Next‑nearest layer B–B hopping (eV)
 
 Global configuration variables control the calculation parameters:
-- gamma0, gamma1: Tight-binding parameters (eV)
+- gamma0 … gamma5: Tight‑binding parameters (eV)
 - E0, Delta: On-site energies (eV)
 - N_layers: Number of layers
 - stacking: 'abc' or 'aba'
 - k_path_config: k-point path configuration
 
-Author: Generated from nnn-bands-ABC.py and nnn-bands-ABA.py, simplified to nearest-neighbor
+Author: Generated from nnn-bands-ABC.py and nnn-bands-ABA.py, extended to
+include further-neighbour hopping terms
 """
 
 import numpy as np # type: ignore
@@ -30,11 +37,15 @@ except ImportError:
 # Global Configuration Variables
 # =============================================================================
 
-# Nearest-neighbor tight-binding parameters [eV]
+# Slonczewski–Weiss–McClure tight-binding parameters [eV]
 gamma0 = 3.053   # intralayer nearest-neighbor
 gamma1 = 0.403   # interlayer vertical dimer
-E0 = 0      # on-site shift
-Delta = 0        # A vs B on-site asymmetry
+gamma2 = -0.025  # next-nearest layer (A↔A)
+gamma3 = 0.274   # interlayer skew (Aₙ ↔ Bₙ₊₁)
+gamma4 = 0.143   # interlayer like-sublattice (A↔A, B↔B)
+gamma5 = 0.030   # next-nearest layer (B↔B)
+E0 = -0.025      # on-site shift
+Delta = -0.005   # A vs B on-site asymmetry
 
 # System configuration
 N_layers = 3           # Number of layers
@@ -299,6 +310,8 @@ def get_parameters():
     """
     return {
         'gamma0': gamma0, 'gamma1': gamma1,
+        'gamma2': gamma2, 'gamma3': gamma3,
+        'gamma4': gamma4, 'gamma5': gamma5,
         'E0': E0, 'Delta': Delta
     }
 
@@ -309,9 +322,9 @@ def get_parameters():
 def build_hamiltonian_abc(kx_rec, ky_rec, N=None):
     """
     Build Hamiltonian for ABC (rhombohedral) stacked multilayer graphene.
-    
-    Uses only nearest-neighbor intralayer (gamma0) and interlayer vertical dimer (gamma1) coupling.
-    In ABC stacking, only the gamma1 coupling is used between adjacent layers.
+
+    Implements the full SWMC model including intralayer γ0 and interlayer
+    hoppings γ1–γ5.  Adjacent layers follow the T₊ coupling matrix.
     
     Args:
         kx_rec, ky_rec: k-coordinates in reciprocal lattice units
@@ -339,24 +352,43 @@ def build_hamiltonian_abc(kx_rec, ky_rec, N=None):
         H[iB, iB] += EB
         H[iA, iB] += gamma0 * f
         H[iB, iA] += gamma0 * fc
-    
-    # Adjacent layers: n -> n+1, only gamma1 coupling (B_n <-> A_{n+1})
+
+    # Adjacent layers: n -> n+1, T_plus couplings
     for n in range(N-1):
         iA, iB = 2*n, 2*n+1
         jA, jB = 2*(n+1), 2*(n+1)+1
-        
-        # Only vertical dimer coupling: B_n <-> A_{n+1}
+
+        # γ4*f: A_n -> A_{n+1} and B_n -> B_{n+1}
+        H[iA, jA] += gamma4 * f
+        H[jA, iA] += gamma4 * fc
+        H[iB, jB] += gamma4 * f
+        H[jB, iB] += gamma4 * fc
+
+        # γ1: B_n <-> A_{n+1}
         H[iB, jA] += gamma1
         H[jA, iB] += gamma1
-    
+
+        # γ3*f*: A_n <-> B_{n+1}
+        H[iA, jB] += gamma3 * fc
+        H[jB, iA] += gamma3 * f
+
+    # Next-nearest layer couplings: n -> n+2
+    for n in range(N-2):
+        iA, iB = 2*n, 2*n+1
+        kA, kB = 2*(n+2), 2*(n+2)+1
+        H[iA, kA] += gamma2
+        H[kA, iA] += gamma2
+        H[iB, kB] += gamma5
+        H[kB, iB] += gamma5
+
     return H
 
 def build_hamiltonian_aba(kx_rec, ky_rec, N=None):
     """
     Build Hamiltonian for ABA (Bernal) stacked multilayer graphene.
-    
-    Uses only nearest-neighbor intralayer (gamma0) and interlayer vertical dimer (gamma1) coupling.
-    In ABA stacking, the gamma1 coupling alternates between different sublattice pairs.
+
+    Implements the SWMC model with intralayer γ0 and interlayer hoppings
+    γ1–γ5.  Adjacent layers alternate between T₊ and T₋ coupling matrices.
     
     Args:
         kx_rec, ky_rec: k-coordinates in reciprocal lattice units
@@ -377,28 +409,49 @@ def build_hamiltonian_aba(kx_rec, ky_rec, N=None):
     dim = 2*N
     H = np.zeros((dim, dim), dtype=complex)
     
-    # Intralayer blocks: H_0 = [[EA, γ0*f], [γ0*f*, EB]]
+    # Intralayer blocks
     for n in range(N):
         iA, iB = 2*n, 2*n+1
         H[iA, iA] += EA
         H[iB, iB] += EB
         H[iA, iB] += gamma0 * f
         H[iB, iA] += gamma0 * fc
-    
-    # Adjacent layers: n -> n+1, alternating gamma1 coupling
+
+    # Adjacent layers: n -> n+1
     for n in range(N-1):
         iA, iB = 2*n, 2*n+1
         jA, jB = 2*(n+1), 2*(n+1)+1
-        
+
         if n % 2 == 0:
-            # Even layers: B_n <-> A_{n+1}
+            # T_plus matrix
+            H[iA, jA] += gamma4 * f
+            H[jA, iA] += gamma4 * fc
+            H[iB, jB] += gamma4 * f
+            H[jB, iB] += gamma4 * fc
             H[iB, jA] += gamma1
             H[jA, iB] += gamma1
+            H[iA, jB] += gamma3 * fc
+            H[jB, iA] += gamma3 * f
         else:
-            # Odd layers: A_n <-> B_{n+1}
+            # T_minus matrix
+            H[iA, jA] += gamma4 * fc
+            H[jA, iA] += gamma4 * f
+            H[iB, jB] += gamma4 * fc
+            H[jB, iB] += gamma4 * f
             H[iA, jB] += gamma1
             H[jB, iA] += gamma1
-    
+            H[iB, jA] += gamma3 * f
+            H[jA, iB] += gamma3 * fc
+
+    # Next-nearest layer couplings (same as ABC)
+    for n in range(N-2):
+        iA, iB = 2*n, 2*n+1
+        kA, kB = 2*(n+2), 2*(n+2)+1
+        H[iA, kA] += gamma2
+        H[kA, iA] += gamma2
+        H[iB, kB] += gamma5
+        H[kB, iB] += gamma5
+
     return H
 
 def build_hamiltonian(kx_rec, ky_rec, N=None, stacking_type=None):
@@ -840,7 +893,7 @@ def set_parameters(**kwargs):
     Args:
         **kwargs: Parameter name-value pairs (gamma0, gamma1, N_layers, stacking, etc.)
     """
-    global gamma0, gamma1, E0, Delta
+    global gamma0, gamma1, gamma2, gamma3, gamma4, gamma5, E0, Delta
     global N_layers, stacking, K_point, dk, n_k, d_cc
     
     for key, value in kwargs.items():
@@ -857,6 +910,10 @@ def get_info():
     print(f"\nTight-binding parameters (eV):")
     print(f"  γ0 = {gamma0:7.3f}  (intralayer nearest-neighbor)")
     print(f"  γ1 = {gamma1:7.3f}  (interlayer vertical dimer)")
+    print(f"  γ2 = {gamma2:7.3f}  (next-nearest layer A-A)")
+    print(f"  γ3 = {gamma3:7.3f}  (interlayer skew A↔B)")
+    print(f"  γ4 = {gamma4:7.3f}  (interlayer like-sublattice)")
+    print(f"  γ5 = {gamma5:7.3f}  (next-nearest layer B-B)")
     print(f"  E0 = {E0:7.3f}  (on-site shift)")
     print(f"  Δ  = {Delta:7.3f}  (A-B asymmetry)")
     print(f"\nk-path: {n_k} points, dk = {dk}, d_cc = {d_cc} Å")
@@ -877,13 +934,13 @@ if __name__ == "__main__":
     # Calculate and plot
     print("\nCalculating ABC bands...")
     E_abc, k_mag = calculate_bands()
-    plot_bands(E_abc, k_mag, title_suffix="ABC")
+    plot_bands(E_abc, k_mag, N=N_layers, stacking_type='abc')
     
     # Switch to ABA
     set_parameters(stacking='aba')
     print("\nCalculating ABA bands...")
     E_aba, k_mag = calculate_bands()
-    plot_bands(E_aba, k_mag, title_suffix="ABA")
+    plot_bands(E_aba, k_mag, N=N_layers, stacking_type='aba')
     
     # Panel comparison for ABC
     print("\nGenerating ABC panel comparison...")
