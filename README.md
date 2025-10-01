@@ -27,7 +27,7 @@ Don't worry, the defaults are sensible! But if you're feeling adventurous:
 - `E0`: Energy offset (default: 0)
 - `Delta`: A vs B asymmetry (default: 0)
 
-### The System Stuff
+### Settings
 - `N_layers`: How many layers? (default: 3)
 - `stacking`: 'abc' for rhombohedral or 'aba' for Bernal (default: 'abc')
 
