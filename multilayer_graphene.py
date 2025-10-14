@@ -87,6 +87,22 @@ def _frac_to_cart(frac):
     frac = np.asarray(frac, dtype=float)
     return frac[..., 0:1] * b1 + frac[..., 1:2] * b2
 
+def _real_space_cell_area():
+    """
+    Area of the 2D primitive unit cell (Å²) used for the honeycomb lattice.
+    """
+    a = np.sqrt(3.0) * d_cc
+    a1 = np.array([a, 0.0])
+    a2 = np.array([a / 2.0, a * np.sqrt(3.0) / 2.0])
+    return abs(a1[0] * a2[1] - a1[1] * a2[0])
+
+def _brillouin_zone_area():
+    """
+    Area of the 2D first Brillouin zone (Å⁻²) associated with the current lattice.
+    """
+    b1, b2 = _reciprocal_vectors()
+    return abs(np.cross(b1, b2))
+
 def get_brillouin_zone(plot=True, ax=None, annotate=True, figsize=(4, 4), save_as=None, show=True):
     """
     Gather first Brillouin zone coordinates and key high-symmetry points, and
@@ -828,6 +844,282 @@ def plot_band_density(band_index, N=None, stacking_type=None,
         print(f"Plot saved as: {save_as}")
     else:
         plt.show()
+
+# =============================================================================
+# Density of States
+# =============================================================================
+
+def _sample_bz_spectrum(N, stacking_type, grid_shape, use_tqdm=None):
+    """
+    Sample the Brillouin zone on a uniform fractional grid and return eigenvalues.
+
+    Args:
+        N: Number of layers
+        stacking_type: 'abc' or 'aba'
+        grid_shape: Tuple (n_kx, n_ky) for the sampling grid
+        use_tqdm: Force enabling/disabling tqdm progress (None = auto)
+
+    Returns:
+        dict: Contains sampled eigenvalues and bookkeeping information:
+              'eigenvalues': array with shape (n_kx * n_ky, 2N)
+              'total_kpoints': n_kx * n_ky
+              'grid_shape': (n_kx, n_ky)
+    """
+    if len(grid_shape) != 2:
+        raise ValueError("grid_shape must be a tuple of two integers (n_kx, n_ky).")
+    n_kx, n_ky = int(grid_shape[0]), int(grid_shape[1])
+    if n_kx <= 0 or n_ky <= 0:
+        raise ValueError("grid_shape entries must be positive integers.")
+
+    total_kpoints = n_kx * n_ky
+    kx_vals = np.linspace(0.0, 1.0, n_kx, endpoint=False)
+    ky_vals = np.linspace(0.0, 1.0, n_ky, endpoint=False)
+
+    eigenvalues = np.empty((total_kpoints, 2 * N), dtype=float)
+
+    enable_tqdm = HAS_TQDM if use_tqdm is None else bool(use_tqdm)
+    show_progress = enable_tqdm and total_kpoints >= 5000
+    iterator = enumerate(ky_vals)
+    if show_progress:
+        iterator = enumerate(tqdm(ky_vals, desc="Sampling BZ", unit="ky"))
+
+    idx = 0
+    for iy, ky in iterator:
+        for kx in kx_vals:
+            H = build_hamiltonian(kx, ky, N=N, stacking_type=stacking_type)
+            evals = np.linalg.eigvalsh(H).real
+            eigenvalues[idx] = np.sort(evals)
+            idx += 1
+
+    return {
+        'eigenvalues': eigenvalues,
+        'total_kpoints': total_kpoints,
+        'grid_shape': (n_kx, n_ky),
+    }
+
+def calculate_density_of_states(energy_range=None, N=None, stacking_type=None,
+                                grid_shape=(200, 200), num_energy_points=400,
+                                gaussian_sigma=0.01, use_tqdm=None):
+    """
+    Calculate the density of states over an energy range.
+
+    Args:
+        energy_range: Tuple (emin, emax) in eV. If None, inferred from spectrum.
+        N: Number of layers (defaults to global N_layers)
+        stacking_type: 'abc' or 'aba' (defaults to global stacking)
+        grid_shape: Tuple (n_kx, n_ky) sampling the Brillouin zone
+        num_energy_points: Number of energy samples / histogram bins
+        gaussian_sigma: Optional Gaussian broadening (eV). Use 0 or None to disable.
+        use_tqdm: Force enabling/disabling tqdm progress (None = auto)
+
+    Returns:
+        dict: DOS data with keys:
+              'energy', 'dos_per_unit_cell', 'dos_per_area', 'bin_width',
+              'counts', 'total_kpoints', 'grid_shape', 'parameters'
+    """
+    if N is None:
+        N = N_layers
+    if stacking_type is None:
+        stacking_type = stacking
+    if num_energy_points < 2:
+        raise ValueError("num_energy_points must be at least 2.")
+
+    sample = _sample_bz_spectrum(N, stacking_type, grid_shape, use_tqdm=use_tqdm)
+    eigenvalues = sample['eigenvalues'].ravel()
+    total_kpoints = sample['total_kpoints']
+
+    if energy_range is None:
+        emin, emax = float(np.min(eigenvalues)), float(np.max(eigenvalues))
+        span = max(emax - emin, 1e-6)
+        padding = 0.05 * span
+        e_min = emin - padding
+        e_max = emax + padding
+    else:
+        e_min, e_max = map(float, energy_range)
+        if e_max < e_min:
+            e_min, e_max = e_max, e_min
+
+    energy_edges = np.linspace(e_min, e_max, num_energy_points + 1)
+    counts, _ = np.histogram(eigenvalues, bins=energy_edges)
+    captured = counts.sum()
+    total_states = eigenvalues.size
+    if captured < total_states:
+        missing = total_states - captured
+        print(f"Warning: {missing} states lie outside the specified energy_range.")
+
+    bin_centers = 0.5 * (energy_edges[:-1] + energy_edges[1:])
+    bin_width = energy_edges[1] - energy_edges[0]
+    states_per_unit_cell = counts / total_kpoints
+    dos_per_unit_cell = states_per_unit_cell / bin_width
+
+    real_space_area = _real_space_cell_area()
+    states_per_area = states_per_unit_cell / real_space_area
+    dos_per_area = states_per_area / bin_width
+
+    if gaussian_sigma is not None and gaussian_sigma > 0.0:
+        sigma_bins = gaussian_sigma / bin_width
+        if sigma_bins > 0.0:
+            radius = max(1, int(np.ceil(4.0 * sigma_bins)))
+            offsets = np.arange(-radius, radius + 1, dtype=float)
+            kernel = np.exp(-0.5 * (offsets / sigma_bins) ** 2)
+            kernel /= kernel.sum()
+            dos_per_unit_cell = np.convolve(dos_per_unit_cell, kernel, mode='same')
+            dos_per_area = np.convolve(dos_per_area, kernel, mode='same')
+
+    return {
+        'energy': bin_centers,
+        'dos_per_unit_cell': dos_per_unit_cell,
+        'dos_per_area': dos_per_area,
+        'bin_width': bin_width,
+        'counts': counts,
+        'total_kpoints': total_kpoints,
+        'grid_shape': sample['grid_shape'],
+        'parameters': {
+            'N_layers': N,
+            'stacking': stacking_type,
+            'energy_range': (e_min, e_max),
+            'gaussian_sigma': gaussian_sigma,
+        }
+    }
+
+def calculate_density_of_states_window(energy_min, energy_max, N=None, stacking_type=None,
+                                       grid_shape=(200, 200), use_tqdm=None):
+    """
+    Approximate the density of states averaged over a given energy window.
+
+    The calculation samples the primitive Brillouin zone with a uniform grid in
+    fractional reciprocal coordinates and counts eigenvalues that fall inside the
+    requested energy window. The result is returned both per-layer unit cell and
+    per absolute area using the in-plane lattice vectors defined for the model.
+
+    Args:
+        energy_min: Lower bound of the energy window (eV)
+        energy_max: Upper bound of the energy window (eV)
+        N: Number of layers (defaults to global N_layers)
+        stacking_type: 'abc' or 'aba' (defaults to global stacking)
+        grid_shape: Tuple (n_kx, n_ky) controlling the sampling grid in fractional k-space
+        use_tqdm: Force enabling/disabling tqdm progress bar (None = auto)
+
+    Returns:
+        dict: Contains averaged DOS and bookkeeping fields with keys:
+              'average_dos_per_unit_cell' (states per unit cell per eV),
+              'average_dos_per_area' (states per Å² per eV),
+              'integrated_states_per_unit_cell',
+              'integrated_states_per_area',
+              'raw_state_count', 'grid_shape', 'energy_window',
+              'window_width', 'N_layers', 'stacking', 'bz_area', 'real_space_cell_area'
+    """
+    if N is None:
+        N = N_layers
+    if stacking_type is None:
+        stacking_type = stacking
+
+    e_min = float(energy_min)
+    e_max = float(energy_max)
+    if e_max < e_min:
+        e_min, e_max = e_max, e_min
+
+    window_width = e_max - e_min
+    if window_width <= 0.0:
+        raise ValueError("energy_max must be greater than energy_min for DOS calculation.")
+
+    sample = _sample_bz_spectrum(N, stacking_type, grid_shape, use_tqdm=use_tqdm)
+    eigenvalues = sample['eigenvalues'].ravel()
+    total_kpoints = sample['total_kpoints']
+
+    raw_count = int(np.count_nonzero((eigenvalues >= e_min) & (eigenvalues <= e_max)))
+
+    # Each k-point represents the same fraction of the Brillouin zone
+    states_per_unit_cell = raw_count / total_kpoints
+
+    # Convert to DOS per real-space area using lattice vectors consistent with _reciprocal_vectors()
+    real_space_area = _real_space_cell_area()
+    states_per_area = states_per_unit_cell / real_space_area
+
+    avg_dos_unit_cell = states_per_unit_cell / window_width
+    avg_dos_area = states_per_area / window_width
+
+    bz_area = _brillouin_zone_area()
+
+    return {
+        'average_dos_per_unit_cell': avg_dos_unit_cell,
+        'average_dos_per_area': avg_dos_area,
+        'integrated_states_per_unit_cell': states_per_unit_cell,
+        'integrated_states_per_area': states_per_area,
+        'raw_state_count': raw_count,
+        'grid_shape': sample['grid_shape'],
+        'energy_window': (e_min, e_max),
+        'window_width': window_width,
+        'N_layers': N,
+        'stacking': stacking_type,
+        'bz_area': bz_area,
+        'real_space_cell_area': real_space_area,
+    }
+
+def plot_dos(energy_range=None, N=None, stacking_type=None,
+             grid_shape=(200, 200), num_energy_points=400,
+             gaussian_sigma=0.01, use_tqdm=None, per_area=False,
+             ax=None, figsize=(5, 4), label=None, show=True, return_data=False):
+    """
+    Plot the density of states for the multilayer graphene model.
+
+    Args:
+        energy_range: Tuple (emin, emax) for plotting range (eV). Inferred if None.
+        N: Number of layers (defaults to global N_layers)
+        stacking_type: 'abc' or 'aba' (defaults to global stacking)
+        grid_shape: Tuple (n_kx, n_ky) sampling the Brillouin zone
+        num_energy_points: Number of histogram bins / plotted samples
+        gaussian_sigma: Optional Gaussian smoothing width (eV)
+        use_tqdm: Force enabling/disabling tqdm progress (None = auto)
+        per_area: If True, plot DOS in states/(eV Å²). Otherwise per unit cell.
+        ax: Optional Matplotlib Axes to draw on
+        figsize: Figure size when creating new axes
+        label: Optional legend label
+        show: Call plt.show() when creating a new figure
+        return_data: If True, return the DOS dictionary used for plotting
+
+    Returns:
+        dict or None: DOS dictionary when return_data is True, else None.
+    """
+    dos_data = calculate_density_of_states(
+        energy_range=energy_range,
+        N=N,
+        stacking_type=stacking_type,
+        grid_shape=grid_shape,
+        num_energy_points=num_energy_points,
+        gaussian_sigma=gaussian_sigma,
+        use_tqdm=use_tqdm,
+    )
+
+    y_values = dos_data['dos_per_area'] if per_area else dos_data['dos_per_unit_cell']
+    units = 'states/(eV Å²)' if per_area else 'states/(eV unit cell)'
+
+    created_fig = False
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        created_fig = True
+    else:
+        fig = ax.figure
+
+    ax.plot(dos_data['energy'], y_values, label=label)
+    ax.set_xlabel("Energy (eV)")
+    ax.set_ylabel(f"DOS ({units})")
+
+    N_plot = dos_data['parameters']['N_layers']
+    stacking_plot = dos_data['parameters']['stacking'].upper()
+    ax.set_title(f"{stacking_plot} | {N_plot}-layer DOS")
+
+    if label is not None:
+        ax.legend()
+
+    if created_fig:
+        fig.tight_layout()
+        if show:
+            plt.show()
+
+    if return_data:
+        return dos_data
+    return None
 
 # =============================================================================
 # Utility Functions
