@@ -18,6 +18,8 @@ Global configuration variables control the calculation parameters:
 Author: Generated from nnn-bands-ABC.py and nnn-bands-ABA.py, simplified to nearest-neighbor
 """
 
+import csv
+import json
 import numpy as np # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 try:
@@ -979,6 +981,8 @@ def calculate_density_of_states(energy_range=None, N=None, stacking_type=None,
             'stacking': stacking_type,
             'energy_range': (e_min, e_max),
             'gaussian_sigma': gaussian_sigma,
+            'grid_shape': sample['grid_shape'],
+            'num_energy_points': num_energy_points,
         }
     }
 
@@ -1056,10 +1060,111 @@ def calculate_density_of_states_window(energy_min, energy_max, N=None, stacking_
         'real_space_cell_area': real_space_area,
     }
 
+def _save_dos_to_csv(csv_path, dos_data, per_area=False, metadata_extra=None):
+    """
+    Save DOS arrays and metadata to a CSV file with a JSON metadata header.
+    """
+    metadata = dict(dos_data.get('parameters', {}))
+    metadata.update({
+        'bin_width': dos_data.get('bin_width'),
+        'total_kpoints': dos_data.get('total_kpoints'),
+        'grid_shape': tuple(dos_data.get('grid_shape', ())),
+        'per_area': bool(per_area),
+    })
+    if metadata_extra:
+        metadata.update(metadata_extra)
+    metadata['plot_kwargs'] = {
+        'energy_range': metadata.get('energy_range'),
+        'N': metadata.get('N_layers'),
+        'stacking_type': metadata.get('stacking'),
+        'grid_shape': metadata.get('grid_shape'),
+        'num_energy_points': metadata.get('num_energy_points'),
+        'gaussian_sigma': metadata.get('gaussian_sigma'),
+        'per_area': metadata.get('per_area'),
+    }
+    metadata['columns'] = [
+        'energy_eV',
+        'dos_per_unit_cell_states_per_eV',
+        'dos_per_area_states_per_eV_A2',
+    ]
+
+    energy = np.asarray(dos_data['energy'])
+    dos_uc = np.asarray(dos_data['dos_per_unit_cell'])
+    dos_area = np.asarray(dos_data['dos_per_area'])
+
+    with open(csv_path, 'w', newline='') as fh:
+        fh.write(f"# metadata: {json.dumps(metadata, sort_keys=True)}\n")
+        writer = csv.writer(fh)
+        writer.writerow(metadata['columns'])
+        for row in zip(energy, dos_uc, dos_area):
+            writer.writerow(row)
+
+def load_dos_from_csv(csv_path):
+    """
+    Load DOS data and metadata saved by plot_dos() from a CSV file.
+
+    Args:
+        csv_path: Path to the CSV file produced by plot_dos(csv_path=...).
+
+    Returns:
+        dict: {
+            'energy': np.ndarray,
+            'dos_per_unit_cell': np.ndarray,
+            'dos_per_area': np.ndarray,
+            'metadata': dict (includes 'plot_kwargs' for plot_dos)
+        }
+    """
+    with open(csv_path, 'r', newline='') as fh:
+        first_line = fh.readline().strip()
+        if not first_line.startswith("# metadata:"):
+            raise ValueError("CSV file does not contain metadata header.")
+        metadata_json = first_line[len("# metadata:"):].strip()
+        metadata = json.loads(metadata_json)
+        if 'grid_shape' in metadata:
+            metadata['grid_shape'] = tuple(metadata['grid_shape'])
+        if 'energy_range' in metadata:
+            metadata['energy_range'] = tuple(metadata['energy_range'])
+        if 'plot_kwargs' in metadata and metadata['plot_kwargs'] is not None:
+            pk = metadata['plot_kwargs']
+            if 'grid_shape' in pk and pk['grid_shape'] is not None:
+                pk['grid_shape'] = tuple(pk['grid_shape'])
+            if 'energy_range' in pk and pk['energy_range'] is not None:
+                pk['energy_range'] = tuple(pk['energy_range'])
+
+        reader = csv.reader(fh)
+        header = next(reader, None)
+        if header is None:
+            raise ValueError("CSV file is missing data header row.")
+        expected_cols = metadata.get('columns')
+        if expected_cols and list(header) != list(expected_cols):
+            raise ValueError("CSV columns do not match metadata description.")
+
+        energy = []
+        dos_uc = []
+        dos_area = []
+        for row in reader:
+            if not row:
+                continue
+            energy.append(float(row[0]))
+            dos_uc.append(float(row[1]))
+            dos_area.append(float(row[2]))
+
+    energy_arr = np.asarray(energy, dtype=float)
+    dos_uc_arr = np.asarray(dos_uc, dtype=float)
+    dos_area_arr = np.asarray(dos_area, dtype=float)
+
+    return {
+        'energy': energy_arr,
+        'dos_per_unit_cell': dos_uc_arr,
+        'dos_per_area': dos_area_arr,
+        'metadata': metadata,
+    }
+
 def plot_dos(energy_range=None, N=None, stacking_type=None,
              grid_shape=(200, 200), num_energy_points=400,
              gaussian_sigma=0.01, use_tqdm=None, per_area=False,
-             ax=None, figsize=(5, 4), label=None, show=True, return_data=False):
+             ax=None, figsize=(5, 4), label=None, show=True,
+             return_data=False, csv_path=None, metadata_extra=None):
     """
     Plot the density of states for the multilayer graphene model.
 
@@ -1077,6 +1182,8 @@ def plot_dos(energy_range=None, N=None, stacking_type=None,
         label: Optional legend label
         show: Call plt.show() when creating a new figure
         return_data: If True, return the DOS dictionary used for plotting
+        csv_path: Optional path. When provided, save the DOS data to a CSV file.
+        metadata_extra: Optional dict merged into the saved metadata header.
 
     Returns:
         dict or None: DOS dictionary when return_data is True, else None.
@@ -1117,8 +1224,13 @@ def plot_dos(energy_range=None, N=None, stacking_type=None,
         if show:
             plt.show()
 
+    if csv_path is not None:
+        metadata_payload = dict(metadata_extra) if metadata_extra else {}
+        _save_dos_to_csv(csv_path, dos_data, per_area=per_area, metadata_extra=metadata_payload)
+
     if return_data:
         return dos_data
+
     return None
 
 # =============================================================================
