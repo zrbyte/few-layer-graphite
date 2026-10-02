@@ -42,13 +42,13 @@ def load_paper(path):
     return data[:, 0], data[:, 1]
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--dk", type=float, default=1.0e-3, help="k mesh spacing (1/A)")
     ap.add_argument("--bins", type=int, default=800, help="energy bins")
     ap.add_argument("--out", default="dos_comparison_mcellistrim2023.png")
     ap.add_argument("--show", action="store_true")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     if not args.show:
         matplotlib.use("Agg")
 
