@@ -122,10 +122,7 @@ def main():
         print(f"  Layer {N:2d}/{max_layers}", end=" ", flush=True)
         
         # Calculate bands for this layer count
-        mlg.set_parameters(
-            N_layers=N,
-            gamma1 = 0.403
-        )
+        mlg.set_parameters(N_layers=N)
         E, k_mag = mlg.calculate_bands()
         
         # Create the plot with consistent styling

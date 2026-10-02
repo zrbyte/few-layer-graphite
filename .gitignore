@@ -174,3 +174,6 @@ multilayer_graphene_aba_5.0fps.gif
 *.csv
 
 CLAUDE.md
+
+# digitised reference curves used by the tests
+!tests/data/*.csv
