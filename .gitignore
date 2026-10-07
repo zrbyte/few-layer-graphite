@@ -178,5 +178,9 @@ CLAUDE.md
 # digitised reference curves used by the tests
 !tests/data/*.csv
 
+# worked examples: notebooks and the published panels they compare with
+!examples/*.ipynb
+!examples/hagymasi2022_fig1b.png
+
 # generated report (python make_report.py)
 report/
