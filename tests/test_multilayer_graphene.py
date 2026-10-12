@@ -233,6 +233,17 @@ def test_dos_bilayer_analytic_gamma1_only():
     assert np.abs(d["dos_per_area"][sel] / analytic[sel] - 1.0).max() < 5e-3
 
 
+@pytest.mark.parametrize("model,n", [("tb", 7), ("tb", 8), ("kp", 7)])
+def test_valley_window_eigenvalues_use_the_mirror_symmetry(model, n):
+    t = np.linspace(-0.05, 0.05, n)
+    px, py = np.meshgrid(t, t, indexing="xy")
+    K = mlg.K_point(-1) if model == "tb" else np.zeros(2)
+    direct = mlg.eigenvalues(px + K[0], py + K[1], None, "ABCB", model=model, xi=-1)
+    folded = mlg._valley_window_eigenvalues(t, None, "ABCB", model, xi=-1, max_bytes=5000)   # 4 k points per chunk
+    assert folded.shape == direct.shape
+    assert np.abs(folded - direct).max() < 1e-12
+
+
 def test_dos_full_zone_counts_all_states():
     for seq, n_states in (("A", 4.0), ("AB", 8.0), ("ABCB", 16.0)):
         d = mlg.calculate_density_of_states((-12.0, 12.0), stacking_type=seq, region="bz",

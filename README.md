@@ -72,7 +72,9 @@ valley degeneracy 2 applied) or over the full Brillouin zone (`region='bz'`).
 Results are returned per unit cell, per Å² and per cm² (spin degeneracy 2
 included).  `model='kp'` evaluates the paper's continuum Hamiltonian instead of
 the lattice one.  `plot_dos(..., csv_path=...)` / `load_dos_from_csv` store and
-reload curves.
+reload curves.  Only p_y ≥ 0 is diagonalised (E(p_x, −p_y) = E(p_x, p_y) for
+every stack) and the Hamiltonians are built in pieces of at most 256 MB, so
+thick stacks such as 100 layers fit in memory.
 
 ## Comparison with McEllistrim et al. (2023)
 
@@ -94,6 +96,66 @@ live in `tests/data/`.  With the paper's parameters:
 - the ABA trilayer panel of Fig. 7 is drawn on a 10¹³ scale and lies a factor
   of two below the model and below every other panel.
 
+## Bulk graphite and the ERS background
+
+`bulk_graphite.py` is the infinite-stack limit of the same model: hexagonal
+(Bernal, AB), rhombohedral (ABC) or any periodic polytype, with the layer
+blocks taken from `multilayer_graphene.py` and the phase exp(i m k_z d),
+d = 3.35 Å, on every hop across m layers.
+
+```python
+import bulk_graphite as bg
+
+H = bg.bulk_hamiltonian(kx, ky, kz, 'ab')             # (…, 4, 4); 'abc' gives (…, 2, 2)
+dos = bg.calculate_bulk_density_of_states((-1.0, 1.0), 'abc')
+dos['energy'], dos['dos_per_atom'], dos['dos_per_cm3'], dos['fermi_energy']
+```
+
+For Bernal stacking this is the SWMcC model of graphite, with
+Δ = 2Δ' + γ2 − γ5 (−5 meV for the default parameters) and the energy zero
+shifted by −γ2.  For rhombohedral stacking the primitive cell holds one layer
+and the bands are Dirac cones on a spiral of radius γ1/ħv around the K–H line.
+The DOS is integrated slice by slice in k_z with the triangle method; mesh cells
+near the Fermi level are subdivided, and the Fermi level follows from charge
+neutrality.
+
+`python graphite_ers_background.py --raman-min 80 --raman-max 6200` compares the
+two polytypes as an estimate of their electronic Raman scattering (ERS)
+continuum.  The ERS of graphitic systems consists of interband excitations
+between mirror bands, so the signal at Raman shift ω follows the DOS at
+E_F ± ħω/2 (Ponosov et al., PRB 91, 195435 (2015); García-Ruiz et al., Nano
+Lett. 19, 6152 (2019)).  The script writes `examples/graphite_ers_dos_comparison.png`
+(both DOS curves), `examples/graphite_ers_dos_raman_window.png` (the energies
+reached by the spectrometer shaded), the table `examples/graphite_ers_dos.csv`
+and the page `examples/graphite_ers_dos_report.html`; `--from-csv` redraws them
+for another Raman range without recomputing.  `--slabs 20 50 100` (the default)
+adds the DOS of finite slabs of both stackings from `multilayer_graphene.py`,
+in `examples/graphite_ers_dos_slabs.png` and `_slabs.csv` and as the last
+section of the report; the slabs are diagonalised in parallel processes with
+one BLAS thread each.  `--temperature 300` (the default) adds
+`examples/graphite_ers_dos_thermal.png` and a last section with the bulk and
+slab curves convolved with the derivative of the Fermi function,
+sech²(E/2kT)/4kT, of full width 3.53 kT (91 meV at 300 K).  The mathematics of
+the report is written in LaTeX and typeset by MathJax, which the page loads
+from a CDN; `--page-only PATH` also writes the page without its document
+skeleton, for a publisher that adds its own.  With the default parameters:
+
+- hexagonal graphite has 2.0×10¹⁸ cm⁻³ carriers of each sign and a Fermi-level
+  DOS of 4.9×10⁻³ states eV⁻¹ atom⁻¹; rhombohedral graphite has the linear DOS
+  of graphene, with a band overlap of 2.7 meV and 1.2×10¹⁵ cm⁻³ carriers;
+- the rhombohedral DOS is 0.04 of the hexagonal one at 80 cm⁻¹
+  (|E − E_F| = 5 meV), 0.40 at 1000 cm⁻¹ and 0.81 at 3000 cm⁻¹; the curves
+  cross at 5020 cm⁻¹ and the rhombohedral DOS is 5 % larger at 6200 cm⁻¹;
+- hexagonal slabs of 20, 50 and 100 layers stay within 3.5 %, 1.3 % and 0.7 %
+  of the bulk DOS between 30 and 384 meV from E_F; rhombohedral slabs split the
+  bulk continuum into subbands whose −n and +n peaks are 4γ1 sin[(n + ½)π/(2N + 1)]
+  apart (first ERS peak at 1443, 587 and 295 cm⁻¹), and their surface band pins
+  E_F about 20 meV below the bulk Dirac energy;
+- broadened at 300 K the subband ladders disappear and the rhombohedral /
+  hexagonal ratio at 80 cm⁻¹ becomes 0.26 in the bulk and 0.66, 0.43 and 0.35
+  for 20, 50 and 100 layers (surface band); from 2000 cm⁻¹ upwards the slabs
+  are within 7 % of the bulk ratio.
+
 ## Tests
 
 ```
@@ -104,7 +166,12 @@ The tests check the parameter conversion, Hermiticity, time reversal and zone
 periodicity, the exact reduction of the lattice model to the paper's Eq. (1)
 at K, analytic band edges (bilayer, ABC trilayer, ABAB and ABCB dimer chains),
 the DOS normalisation (monolayer, bilayer, full-zone state count) and the
-agreement with the digitised DOS of the paper.
+agreement with the digitised DOS of the paper.  For the bulk model they check
+the SWMcC energies on the K–H line, that bulk Bloch states solve the
+finite-stack Hamiltonian in its interior, the DOS in the γ0, γ1 limit
+(graphene for ABC, the k_z average of bilayers for AB) and the mesh refinement;
+for the ERS script, the Fermi level of a slab, the Raman shift to energy mapping,
+the thermal kernel, the tables written to disk and the report.
 
 ## Other scripts
 
