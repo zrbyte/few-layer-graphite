@@ -732,6 +732,34 @@ def _auto_k_max(energy_range):
     return (e_max + 2.0 * abs(gamma1) + 0.15) / hv
 
 
+def _eigenvalues_in_chunks(kx, ky, N, seq, model="tb", xi=+1, max_bytes=2 ** 28):
+    """
+    ``eigenvalues`` for 1D arrays kx, ky, evaluated in pieces so that the stack
+    of Hamiltonians stays below max_bytes (a 100-layer stack takes 640 kB per k
+    point).
+    """
+    step = max(1, int(max_bytes // (16 * (2 * len(seq)) ** 2)))
+    return np.concatenate([eigenvalues(kx[i:i + step], ky[i:i + step], N, seq, model=model, xi=xi)
+                           for i in range(0, kx.size, step)])
+
+
+def _valley_window_eigenvalues(t, N, seq, model="tb", xi=+1, max_bytes=2 ** 28):
+    """
+    Band energies on the square mesh K_xi + (t_j, t_i), shape (n, n, 2N) with
+    the first axis along p_y; t must be symmetric about 0.
+
+    Only p_y >= 0 is diagonalised: complex conjugation of H exchanges f and
+    f*, so that E(p_x, -p_y) = E(p_x, p_y) for every stack and both models.
+    """
+    n = t.size
+    half = t[n // 2:]
+    px, py = np.meshgrid(t, half, indexing="xy")
+    K = K_point(xi) if model == "tb" else np.zeros(2)
+    E = _eigenvalues_in_chunks(px.ravel() + K[0], py.ravel() + K[1], N, seq, model, xi, max_bytes)
+    E = E.reshape(half.size, n, E.shape[-1])
+    return np.concatenate([E[:0:-1] if n % 2 else E[::-1], E])
+
+
 def calculate_density_of_states(energy_range=(-0.8, 0.8), N=None, stacking_type=None,
                                 model="tb", region="valley", k_max=None, dk=1.0e-3,
                                 n_bz=400, num_energy_points=400, gaussian_sigma=0.0,
@@ -774,13 +802,9 @@ def calculate_density_of_states(energy_range=(-0.8, 0.8), N=None, stacking_type=
         t = np.linspace(-k_max, k_max, n_side)
         h = t[1] - t[0]
         gx, gy = np.meshgrid(t, t, indexing="xy")
-        if model == "tb":
-            K = K_point(xi)
-            E = eigenvalues(gx.ravel() + K[0], gy.ravel() + K[1], N, seq)
-        elif model == "kp":
-            E = eigenvalues(gx.ravel(), gy.ravel(), N, seq, model="kp", xi=xi)
-        else:
+        if model not in ("tb", "kp"):
             raise ValueError("model must be 'tb' or 'kp'.")
+        E = _valley_window_eigenvalues(t, N, seq, model, xi).reshape(n_side * n_side, -1)
         tri = _square_mesh_triangles(n_side, n_side)
         area = 0.5 * h * h
         degeneracy = 2.0 * spin
@@ -800,7 +824,7 @@ def calculate_density_of_states(energy_range=(-0.8, 0.8), N=None, stacking_type=
         gu, gv = np.meshgrid(u, u, indexing="ij")
         kx = gu.ravel() * b1[0] + gv.ravel() * b2[0]
         ky = gu.ravel() * b1[1] + gv.ravel() * b2[1]
-        E = eigenvalues(kx, ky, N, seq)
+        E = _eigenvalues_in_chunks(kx, ky, N, seq)
         tri = _periodic_mesh_triangles(n)
         area = abs(b1[0] * b2[1] - b1[1] * b2[0]) / (2.0 * n * n)
         degeneracy = spin
